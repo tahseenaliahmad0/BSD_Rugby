@@ -8,7 +8,20 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import auth, catalog, events, health, jobs, media, squads, uploads, users, videos
+from app.api import (
+    auth,
+    catalog,
+    events,
+    health,
+    jobs,
+    media,
+    squads,
+    tags,
+    templates,
+    uploads,
+    users,
+    videos,
+)
 from app.config import get_settings
 from app.core.csrf import CSRFMiddleware
 from app.services.storage import get_storage
@@ -47,6 +60,8 @@ def create_app() -> FastAPI:
         videos.router,
         jobs.router,
         uploads.router,
+        templates.router,
+        tags.router,
     ):
         app.include_router(router, prefix="/api")
     app.include_router(media.router)

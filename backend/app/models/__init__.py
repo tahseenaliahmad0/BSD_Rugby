@@ -15,6 +15,8 @@ from app.models.enums import (
     VideoStatus,
 )
 from app.models.event import Event, Job, Upload, Video
+from app.models.export import Export
+from app.models.filters import SavedFilter
 from app.models.importing import ImportBatch
 from app.models.live import LiveSession, LiveTag
 from app.models.playlist import Drawing, Playlist, PlaylistItem, PlaylistShare
@@ -27,6 +29,7 @@ __all__ = [
     "Drawing",
     "Event",
     "EventType",
+    "Export",
     "ImportBatch",
     "ImportFormat",
     "ImportStatus",
@@ -43,6 +46,7 @@ __all__ = [
     "PlaylistItem",
     "PlaylistShare",
     "Role",
+    "SavedFilter",
     "Season",
     "SportVariant",
     "Squad",

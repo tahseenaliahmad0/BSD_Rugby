@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,7 +55,7 @@ class LiveTag(Base):
     )
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     pressed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    lead_s: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    lead_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     descriptors: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     tag_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tags.id", ondelete="SET NULL")

@@ -93,8 +93,9 @@ class Video(Base):
     frame_count: Mapped[int | None] = mapped_column(Integer)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
-    # Seconds on the event timeline at which this video starts (video time = event time - offset).
-    offset_s: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # Milliseconds on the event timeline at which this video starts (ADR 0006):
+    # video seconds = (event ms - offset_ms) / 1000.
+    offset_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[VideoStatus] = mapped_column(
         str_enum(VideoStatus, "video_status"), default=VideoStatus.QUEUED, nullable=False
     )

@@ -35,6 +35,7 @@ from app.models import (
 from app.services.ffmpeg import generate_test_clip
 from app.services.jobs import create_job
 from app.services.storage import get_storage
+from app.services.templates import ensure_default_templates
 from app.services.transcode import transcode
 
 DEMO_SQUAD = "Demo Squad"
@@ -72,6 +73,8 @@ def seed(*, clip_duration_s: float = 30.0) -> None:
             )
         ):
             db.add(Membership(user_id=admin.id, squad_id=squad.id, role=Role.ADMIN))
+
+        ensure_default_templates(db, squad.id, admin.id)
 
         today = dt.date.today()
         season_name = (

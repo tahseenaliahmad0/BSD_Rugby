@@ -53,7 +53,7 @@ class VideoOut(ORMModel):
     frame_count: int | None
     width: int | None
     height: int | None
-    offset_s: float
+    offset_ms: int
     thumbnail_interval_s: int | None
     thumbnail_count: int | None
     proxy_url: str | None
@@ -66,7 +66,7 @@ class VideoOut(ORMModel):
 
 class VideoUpdate(BaseModel):
     camera_label: str | None = Field(default=None, min_length=1, max_length=100)
-    offset_s: float | None = None
+    offset_ms: int | None = None
 
 
 class EventOut(ORMModel):

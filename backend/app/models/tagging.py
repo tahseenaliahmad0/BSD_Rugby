@@ -18,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, str_enum, updated_at_col, uuid_pk
 from app.models.enums import SuggestionStatus, TagSource
@@ -28,19 +28,29 @@ class TagTemplate(Base):
     """The code window for a squad: buttons and descriptor groups. Versioned."""
 
     __tablename__ = "tag_templates"
-    __table_args__ = (UniqueConstraint("squad_id", "name", "version", name="uq_tag_templates"),)
+    __table_args__ = (
+        UniqueConstraint("family_id", "version", name="uq_tag_templates_family_version"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     squad_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("squads.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # All versions of one template share a family id; `is_active` marks the current version.
+    family_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    # [{code, label, hotkey, colour, lead_s, lag_s, descriptor_groups: [..]}]
+    # [{code, label, hotkey, colour, kind: instant|span, lead_ms, lag_ms, groups: [group key]}]
     buttons: Mapped[list[Any]] = mapped_column(JSONB, default=list, nullable=False)
-    # [{name, options: [..], multi: bool}]
+    # [{key, label, kind: options|players, multiple, options: [{value, label, hotkey}]}]
     descriptor_groups: Mapped[list[Any]] = mapped_column(JSONB, default=list, nullable=False)
+    # Which descriptor group holds the outcome, and which of its values count as success.
+    outcome_group: Mapped[str | None] = mapped_column(String(50))
+    success_values: Mapped[list[Any]] = mapped_column(JSONB, default=list, nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = created_at_col()
 
 
@@ -49,7 +59,8 @@ class Tag(Base):
 
     __tablename__ = "tags"
     __table_args__ = (
-        Index("ix_tags_event_start", "event_id", "start_s"),
+        Index("ix_tags_event_start", "event_id", "start_ms"),
+        Index("ix_tags_event_code", "event_id", "code"),
         Index("ix_tags_descriptors", "descriptors", postgresql_using="gin"),
     )
 
@@ -61,10 +72,13 @@ class Tag(Base):
         UUID(as_uuid=True), ForeignKey("tag_templates.id", ondelete="SET NULL")
     )
     code: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    start_s: Mapped[float] = mapped_column(Float, nullable=False)
-    end_s: Mapped[float] = mapped_column(Float, nullable=False)
+    # Integer milliseconds on the event timeline (ADR 0006).
+    start_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     descriptors: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
+    # Optimistic concurrency (ADR 0007): every update must carry the version it last saw.
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     source: Mapped[TagSource] = mapped_column(
         str_enum(TagSource, "tag_source"), default=TagSource.MANUAL, nullable=False
     )
@@ -77,8 +91,15 @@ class Tag(Base):
     live_session_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("live_sessions.id", ondelete="SET NULL")
     )
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = created_at_col()
     updated_at: Mapped[datetime] = updated_at_col()
+
+    players: Mapped[list[TagPlayer]] = relationship(
+        cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class TagPlayer(Base):
@@ -119,9 +140,9 @@ class Suggestion(Base):
         UUID(as_uuid=True), ForeignKey("model_versions.id", ondelete="SET NULL")
     )
     code: Mapped[str] = mapped_column(String(100), nullable=False)
-    # Video-relative seconds; the video offset maps them onto the event timeline.
-    start_s: Mapped[float] = mapped_column(Float, nullable=False)
-    end_s: Mapped[float] = mapped_column(Float, nullable=False)
+    # Video-relative milliseconds; the video offset maps them onto the event timeline.
+    start_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     status: Mapped[SuggestionStatus] = mapped_column(
         str_enum(SuggestionStatus, "suggestion_status"),

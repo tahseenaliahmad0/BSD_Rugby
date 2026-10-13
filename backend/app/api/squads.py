@@ -12,6 +12,7 @@ from app.core.security import hash_password
 from app.db import get_db
 from app.models import Membership, Role, Squad, User
 from app.schemas.squad import MemberAdd, MemberOut, MemberUpdate, SquadCreate, SquadOut, SquadUpdate
+from app.services.templates import ensure_default_templates
 
 router = APIRouter(prefix="/squads", tags=["squads"])
 
@@ -47,6 +48,7 @@ def create_squad(
     db.add(squad)
     db.flush()
     db.add(Membership(user_id=user.id, squad_id=squad.id, role=Role.ADMIN))
+    ensure_default_templates(db, squad.id, user.id)
     db.commit()
     return _squad_out(db, squad, user)
 

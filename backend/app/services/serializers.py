@@ -29,7 +29,7 @@ def video_out(video: Video) -> VideoOut:
         frame_count=video.frame_count,
         width=video.width,
         height=video.height,
-        offset_s=video.offset_s,
+        offset_ms=video.offset_ms,
         thumbnail_interval_s=video.thumbnail_interval_s,
         thumbnail_count=video.thumbnail_count,
         proxy_url=Storage.media_url(video.proxy_path),

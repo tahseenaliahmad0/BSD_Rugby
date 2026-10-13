@@ -61,7 +61,7 @@ export interface Video {
   frame_count: number | null;
   width: number | null;
   height: number | null;
-  offset_s: number;
+  offset_ms: number;
   thumbnail_interval_s: number | null;
   thumbnail_count: number | null;
   proxy_url: string | null;

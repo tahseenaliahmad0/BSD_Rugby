@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Float, ForeignKey, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,7 +28,7 @@ class ImportBatch(Base):
     source_path: Mapped[str | None] = mapped_column(String(1000))
     format: Mapped[ImportFormat] = mapped_column(str_enum(ImportFormat, "import_format"))
     code_mapping: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
-    alignment_offset_s: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    alignment_offset_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     report: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     status: Mapped[ImportStatus] = mapped_column(
         str_enum(ImportStatus, "import_status"), default=ImportStatus.DRY_RUN, nullable=False

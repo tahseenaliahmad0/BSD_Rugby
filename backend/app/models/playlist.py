@@ -6,9 +6,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, updated_at_col, uuid_pk
 
@@ -25,8 +25,20 @@ class Playlist(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    # When built from a filter, the definition is kept so the playlist can be refreshed.
+    filter_definition: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    saved_filter_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("saved_filters.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = created_at_col()
     updated_at: Mapped[datetime] = updated_at_col()
+
+    items: Mapped[list[PlaylistItem]] = relationship(
+        cascade="all, delete-orphan", passive_deletes=True, order_by="PlaylistItem.position"
+    )
+    shares: Mapped[list[PlaylistShare]] = relationship(
+        cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class PlaylistItem(Base):
@@ -35,8 +47,8 @@ class PlaylistItem(Base):
     __tablename__ = "playlist_items"
     __table_args__ = (
         CheckConstraint(
-            "(tag_id IS NOT NULL) OR (event_id IS NOT NULL AND start_s IS NOT NULL "
-            "AND end_s IS NOT NULL)",
+            "(tag_id IS NOT NULL) OR (event_id IS NOT NULL AND start_ms IS NOT NULL "
+            "AND end_ms IS NOT NULL)",
             name="tag_or_range",
         ),
     )
@@ -55,8 +67,12 @@ class PlaylistItem(Base):
     event_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE")
     )
-    start_s: Mapped[float | None] = mapped_column(Float)
-    end_s: Mapped[float | None] = mapped_column(Float)
+    # Ad-hoc range on the event timeline, optionally pinned to one of the event's videos.
+    video_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("videos.id", ondelete="SET NULL")
+    )
+    start_ms: Mapped[int | None] = mapped_column(Integer)
+    end_ms: Mapped[int | None] = mapped_column(Integer)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = created_at_col()
 
@@ -90,7 +106,7 @@ class Drawing(Base):
     tag_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), index=True
     )
-    timestamp_s: Mapped[float] = mapped_column(Float, nullable=False)
+    timestamp_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     shapes: Mapped[list[Any]] = mapped_column(JSONB, default=list, nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
