@@ -12,7 +12,7 @@ from app.models import Event, Player, Tag, TagPlayer, TagTemplate
 from app.schemas.tags import TagCreate, TagOut, TagRef, TagUpdate
 
 
-class TagConflict(Exception):
+class TagConflictError(Exception):
     """Someone else changed the tag since the client last saw it."""
 
     def __init__(self, current: Tag | None) -> None:
@@ -120,7 +120,7 @@ def reload(db: Session, tag_id: uuid.UUID) -> Tag:
 
 
 def _bump(db: Session, tag: Tag, expected_version: int, values: dict[str, Any]) -> None:
-    """Apply `values` only if the row still has `expected_version`; raise TagConflict otherwise."""
+    """Apply `values` only if the row still has `expected_version`, else TagConflictError."""
     result = db.execute(
         update(Tag)
         .where(Tag.id == tag.id, Tag.version == expected_version)
@@ -129,7 +129,7 @@ def _bump(db: Session, tag: Tag, expected_version: int, values: dict[str, Any]) 
     assert isinstance(result, CursorResult)
     if result.rowcount != 1:
         db.rollback()
-        raise TagConflict(load_tag(db, tag.id))
+        raise TagConflictError(load_tag(db, tag.id))
 
 
 def update_tag(
@@ -166,7 +166,7 @@ def delete_tag(db: Session, tag: Tag, expected_version: int | None) -> None:
     assert isinstance(result, CursorResult)
     if result.rowcount != 1:
         db.rollback()
-        raise TagConflict(load_tag(db, tag.id))
+        raise TagConflictError(load_tag(db, tag.id))
 
 
 def split_tag(
@@ -175,13 +175,14 @@ def split_tag(
     if not tag.start_ms < at_ms < tag.end_ms:
         raise TagInputError("The split point must be inside the tag.")
     player_ids = [tp.player_id for tp in tag.players]
+    original_end = tag.end_ms
     _bump(db, tag, expected_version, {"end_ms": at_ms, "updated_by": user_id})
     right = Tag(
         event_id=tag.event_id,
         template_id=tag.template_id,
         code=tag.code,
         start_ms=at_ms,
-        end_ms=tag.end_ms if tag.end_ms > at_ms else at_ms,
+        end_ms=original_end,
         descriptors=dict(tag.descriptors),
         note=tag.note,
         source=tag.source,
@@ -189,7 +190,6 @@ def split_tag(
         created_by=user_id,
         updated_by=user_id,
     )
-    # `tag.end_ms` above is the value before the bump because the ORM object is not refreshed.
     db.add(right)
     db.flush()
     _set_players(db, right, player_ids)
@@ -203,7 +203,7 @@ def merge_tags(db: Session, refs: list[TagRef], event: Event, user_id: uuid.UUID
         if tag is None or tag.event_id != event.id:
             raise TagInputError("All tags must exist and belong to this match.")
         if ref.version is not None and tag.version != ref.version:
-            raise TagConflict(tag)
+            raise TagConflictError(tag)
         tags.append(tag)
     tags.sort(key=lambda t: (t.start_ms, t.created_at))
     keep, others = tags[0], tags[1:]

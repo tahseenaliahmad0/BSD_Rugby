@@ -8,6 +8,7 @@ hosts and containers. The layout is:
     proxies/<video id>/proxy.mp4      browser-friendly H.264/AAC proxy
     proxies/<video id>/poster.jpg
     proxies/<video id>/thumbs/00001.jpg ... and thumbs.vtt
+    exports/<export id>/<name>.mp4   rendered clip or playlist exports
 """
 
 from __future__ import annotations
@@ -45,8 +46,16 @@ class Storage:
     def proxies_dir(self, video_id: uuid.UUID) -> Path:
         return self.root / "proxies" / str(video_id)
 
+    def exports_dir(self, export_id: uuid.UUID) -> Path:
+        return self.root / "exports" / str(export_id)
+
     def ensure_dirs(self) -> None:
-        for d in (self.uploads_dir, self.root / "originals", self.root / "proxies"):
+        for d in (
+            self.uploads_dir,
+            self.root / "originals",
+            self.root / "proxies",
+            self.root / "exports",
+        ):
             d.mkdir(parents=True, exist_ok=True)
 
     # Relative / absolute conversion ---------------------------------------------------------
@@ -67,6 +76,9 @@ class Storage:
     def remove_video_files(self, video_id: uuid.UUID) -> None:
         for d in (self.originals_dir(video_id), self.proxies_dir(video_id)):
             shutil.rmtree(d, ignore_errors=True)
+
+    def remove_export_files(self, export_id: uuid.UUID) -> None:
+        shutil.rmtree(self.exports_dir(export_id), ignore_errors=True)
 
 
 def get_storage() -> Storage:

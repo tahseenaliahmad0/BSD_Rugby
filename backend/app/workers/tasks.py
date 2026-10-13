@@ -6,6 +6,7 @@ import uuid
 
 from app.config import get_settings
 from app.db import get_sessionmaker
+from app.services.exports import run_export
 from app.services.storage import get_storage
 from app.services.transcode import transcode_by_ids
 from app.workers.celery_app import celery_app
@@ -16,6 +17,15 @@ def transcode_video(job_id: str, video_id: str) -> None:
     db = get_sessionmaker()()
     try:
         transcode_by_ids(db, uuid.UUID(job_id), uuid.UUID(video_id), get_storage(), get_settings())
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.workers.tasks.export_video")
+def export_video(export_id: str, job_id: str) -> None:
+    db = get_sessionmaker()()
+    try:
+        run_export(db, uuid.UUID(export_id), uuid.UUID(job_id), get_storage(), get_settings())
     finally:
         db.close()
 

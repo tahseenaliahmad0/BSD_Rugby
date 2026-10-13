@@ -22,14 +22,14 @@ from app.schemas.tags import (
     TagUpdate,
 )
 from app.services import tags as svc
-from app.services.tags import TagConflict, TagInputError
+from app.services.tags import TagConflictError, TagInputError
 
 router = APIRouter(tags=["tags"])
 
 CONFLICT_MESSAGE = "This tag was changed by someone else. Your screen now shows their version."
 
 
-def conflict_response(exc: TagConflict) -> JSONResponse:
+def conflict_response(exc: TagConflictError) -> JSONResponse:
     body = TagConflictOut(
         detail=CONFLICT_MESSAGE if exc.current else "This tag was deleted by someone else.",
         current=svc.tag_out(exc.current) if exc.current else None,
@@ -90,7 +90,7 @@ def batch_tags(
     except TagInputError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except TagConflict as exc:
+    except TagConflictError as exc:
         return conflict_response(exc)
     db.commit()
     return BatchOut(created=created, deleted=deleted)
@@ -107,7 +107,7 @@ def merge_tags(
         tag = svc.merge_tags(db, body.tags, event, user.id)
     except TagInputError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except TagConflict as exc:
+    except TagConflictError as exc:
         return conflict_response(exc)
     db.commit()
     return svc.tag_out(tag)
@@ -133,7 +133,7 @@ def update_tag(
         updated = svc.update_tag(db, tag, body, event.squad_id, user.id)
     except TagInputError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except TagConflict as exc:
+    except TagConflictError as exc:
         return conflict_response(exc)
     db.commit()
     return svc.tag_out(updated)
@@ -154,7 +154,7 @@ def delete_tag(
     tag, _ = _load(db, tag_id, user, Role.ANALYST)
     try:
         svc.delete_tag(db, tag, version)
-    except TagConflict as exc:
+    except TagConflictError as exc:
         return conflict_response(exc)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -174,7 +174,7 @@ def split_tag(
         left, right = svc.split_tag(db, tag, body.version, body.at_ms, user.id)
     except TagInputError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except TagConflict as exc:
+    except TagConflictError as exc:
         return conflict_response(exc)
     db.commit()
     return TagPair(left=svc.tag_out(left), right=svc.tag_out(right))

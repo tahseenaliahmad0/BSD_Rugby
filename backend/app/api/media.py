@@ -19,14 +19,15 @@ from app.config import Settings, get_settings
 from app.core.auth import get_optional_user
 from app.core.permissions import squad_role
 from app.db import get_db
-from app.models import User, Video
+from app.models import Export, User, Video
 from app.services.storage import MEDIA_PREFIX, Storage, get_storage
 
 router = APIRouter(tags=["media"])
 
-# proxies/<uuid>/{proxy.mp4,poster.jpg,thumbs/<n>.jpg,thumbs/thumbs.vtt}, originals/<uuid>/<file>
+# proxies/<uuid>/{proxy.mp4,poster.jpg,thumbs/<n>.jpg,thumbs/thumbs.vtt}, originals/<uuid>/<file>,
+# exports/<uuid>/<file>.mp4
 _ALLOWED = re.compile(
-    r"^(?P<kind>proxies|originals)/(?P<video_id>[0-9a-f-]{36})/(?P<rest>[^/]+(?:/[^/]+)?)$"
+    r"^(?P<kind>proxies|originals|exports)/(?P<item_id>[0-9a-f-]{36})/(?P<rest>[^/]+(?:/[^/]+)?)$"
 )
 _SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9._ -]+$")
 
@@ -39,8 +40,8 @@ CONTENT_TYPES = {
 }
 
 
-def _authorize(db: Session, user: User | None, rel: str) -> Video:
-    """Return the video if `user` may read the file at `rel` (relative to storage root)."""
+def _authorize(db: Session, user: User | None, rel: str) -> None:
+    """Raise unless `user` may read the file at `rel` (relative to the storage root)."""
     match = _ALLOWED.match(rel)
     if match is None or any(
         seg in {".", ".."} or not _SAFE_SEGMENT.match(seg) for seg in match["rest"].split("/")
@@ -50,10 +51,15 @@ def _authorize(db: Session, user: User | None, rel: str) -> Video:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Please sign in to continue."
         )
-    video = db.get(Video, uuid.UUID(match["video_id"]))
-    if video is None or squad_role(db, user, video.event.squad_id) is None:
+    item_id = uuid.UUID(match["item_id"])
+    if match["kind"] == "exports":
+        export = db.get(Export, item_id)
+        squad_id = export.squad_id if export else None
+    else:
+        video = db.get(Video, item_id)
+        squad_id = video.event.squad_id if video else None
+    if squad_id is None or squad_role(db, user, squad_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
-    return video
 
 
 def _rel_from_media_path(path: str) -> str:

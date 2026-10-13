@@ -25,6 +25,7 @@ celery_app.conf.update(
     task_queues=(Queue("cpu"), Queue("gpu")),
     task_routes={
         "app.workers.tasks.transcode_video": {"queue": "cpu"},
+        "app.workers.tasks.export_video": {"queue": "cpu"},
         "app.workers.tasks.gpu_ping": {"queue": "gpu"},
     },
     broker_connection_retry_on_startup=True,

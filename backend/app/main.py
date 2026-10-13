@@ -11,11 +11,15 @@ from fastapi import FastAPI
 from app.api import (
     auth,
     catalog,
+    clips,
     events,
+    exports,
     health,
     jobs,
     media,
+    playlists,
     squads,
+    stats,
     tags,
     templates,
     uploads,
@@ -62,6 +66,10 @@ def create_app() -> FastAPI:
         uploads.router,
         templates.router,
         tags.router,
+        clips.router,
+        playlists.router,
+        stats.router,
+        exports.router,
     ):
         app.include_router(router, prefix="/api")
     app.include_router(media.router)
