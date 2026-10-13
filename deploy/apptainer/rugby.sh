@@ -126,24 +126,45 @@ stop_service() {
   log "stopped $service"
 }
 
+# Apptainer reads --env-file with a shell parser (quotes and $VAR honoured,
+# commands refused), so every value is single-quoted: `Head Analyst` or a
+# password with $ or spaces would otherwise be parsed as a command.
+env_line() {   # env_line NAME VALUE
+  local v="${2//\'/\'\\\'\'}"
+  printf "%s='%s'\n" "$1" "$v"
+}
+
+# Percent-encode a value for use inside a URL (the database password).
+url_encode() {
+  local LC_ALL=C s="$1" out="" c i
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    case "$c" in
+      [A-Za-z0-9._~-]) out+="$c" ;;
+      *) out+="$(printf '%%%02X' "'$c")" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
 backend_env_file() {
   local f="$DATA_DIR/run/backend.env"
   mkdir -p "$DATA_DIR/run"
-  cat > "$f" <<ENV
-APP_ENV=production
-DATABASE_URL=postgresql+pg8000://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB
-REDIS_URL=redis://127.0.0.1:$REDIS_PORT/0
-STORAGE_ROOT=/data
-COOKIE_SECURE=true
-API_SERVES_MEDIA=false
-API_HOST=127.0.0.1
-API_PORT=$API_PORT
-TRANSCODE_ENCODER=$TRANSCODE_ENCODER
-WORKER_CONCURRENCY=$WORKER_CONCURRENCY
-ADMIN_EMAIL=$ADMIN_EMAIL
-ADMIN_NAME=$ADMIN_NAME
-ADMIN_PASSWORD=$ADMIN_PASSWORD
-ENV
+  {
+    env_line APP_ENV production
+    env_line DATABASE_URL "postgresql+pg8000://$(url_encode "$POSTGRES_USER"):$(url_encode "$POSTGRES_PASSWORD")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB"
+    env_line REDIS_URL "redis://127.0.0.1:$REDIS_PORT/0"
+    env_line STORAGE_ROOT /data
+    env_line COOKIE_SECURE true
+    env_line API_SERVES_MEDIA false
+    env_line API_HOST 127.0.0.1
+    env_line API_PORT "$API_PORT"
+    env_line TRANSCODE_ENCODER "$TRANSCODE_ENCODER"
+    env_line WORKER_CONCURRENCY "$WORKER_CONCURRENCY"
+    env_line ADMIN_EMAIL "$ADMIN_EMAIL"
+    env_line ADMIN_NAME "$ADMIN_NAME"
+    env_line ADMIN_PASSWORD "$ADMIN_PASSWORD"
+  } > "$f"
   chmod 600 "$f"
   echo "$f"
 }
@@ -151,25 +172,25 @@ ENV
 caddy_env_file() {
   local f="$DATA_DIR/run/caddy.env"
   mkdir -p "$DATA_DIR/run"
-  cat > "$f" <<ENV
-SITE_ADDRESS=$SITE_ADDRESS
-HTTP_PORT=$HTTP_PORT
-HTTPS_PORT=$HTTPS_PORT
-API_UPSTREAM=127.0.0.1:$API_PORT
-MEDIA_ROOT=/srv/media
-ENV
+  {
+    env_line SITE_ADDRESS "$SITE_ADDRESS"
+    env_line HTTP_PORT "$HTTP_PORT"
+    env_line HTTPS_PORT "$HTTPS_PORT"
+    env_line API_UPSTREAM "127.0.0.1:$API_PORT"
+    env_line MEDIA_ROOT /srv/media
+  } > "$f"
   echo "$f"
 }
 
 postgres_env_file() {
   local f="$DATA_DIR/run/postgres.env"
   mkdir -p "$DATA_DIR/run"
-  cat > "$f" <<ENV
-POSTGRES_USER=$POSTGRES_USER
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-POSTGRES_DB=$POSTGRES_DB
-PGPORT=$POSTGRES_PORT
-ENV
+  {
+    env_line POSTGRES_USER "$POSTGRES_USER"
+    env_line POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
+    env_line POSTGRES_DB "$POSTGRES_DB"
+    env_line PGPORT "$POSTGRES_PORT"
+  } > "$f"
   chmod 600 "$f"
   echo "$f"
 }
