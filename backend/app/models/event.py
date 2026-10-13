@@ -61,7 +61,10 @@ class Event(Base):
     season: Mapped[Season | None] = relationship()
     opponent: Mapped[Opponent | None] = relationship()
     videos: Mapped[list[Video]] = relationship(
-        back_populates="event", cascade="all, delete-orphan", order_by="Video.created_at"
+        back_populates="event",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Video.created_at",
     )
 
 
@@ -103,7 +106,12 @@ class Video(Base):
     updated_at: Mapped[dt.datetime] = updated_at_col()
 
     event: Mapped[Event] = relationship(back_populates="videos")
-    jobs: Mapped[list[Job]] = relationship(back_populates="video", order_by="Job.created_at")
+    jobs: Mapped[list[Job]] = relationship(
+        back_populates="video",
+        order_by="Job.created_at",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Upload(Base):
