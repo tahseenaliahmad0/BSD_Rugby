@@ -16,6 +16,7 @@ import { useEvent } from '../api/hooks';
 import type { Video } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { formatBytes, formatDate } from '../components/format';
+import { formatClock } from '../player/frameMath';
 import { VideoPlayer } from '../player/VideoPlayer';
 import { JobProgress } from '../upload/JobProgress';
 import { UploadPanel } from '../upload/UploadPanel';
@@ -104,7 +105,7 @@ export function MatchPage() {
                     <Text c="dimmed" size="sm">
                       {video.original_filename} · {formatBytes(video.original_size_bytes)}
                       {video.duration_s && video.fps
-                        ? ` · ${Math.round(video.duration_s / 60)} min · ${video.width}x${video.height} · ${video.fps.toFixed(2)} fps`
+                        ? ` · ${formatClock(video.duration_s)} · ${video.width}x${video.height} · ${video.fps.toFixed(2)} fps`
                         : ''}
                     </Text>
                   </div>
