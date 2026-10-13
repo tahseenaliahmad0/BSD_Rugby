@@ -16,9 +16,12 @@ background instances, one data directory. Decisions in `docs/decisions/0009-appt
 
 ## First install
 
+You are not root, so everything goes under your home directory (or any folder you own):
+
 ```bash
-git clone <this repository> /srv/rugby/app      # any path you own works
-cd /srv/rugby/app
+cd ~
+git clone <this repository> rugby-app
+cd ~/rugby-app
 cp deploy/apptainer/rugby.env.example deploy/apptainer/rugby.env
 nano deploy/apptainer/rugby.env                 # DATA_DIR, SITE_ADDRESS, passwords, admin
 deploy/apptainer/rugby.sh build                 # 10 to 20 minutes the first time
@@ -36,7 +39,7 @@ either install the college certificate (copy `tls.caddy.example` to `tls.caddy`,
 ## Upgrades
 
 ```bash
-cd /srv/rugby/app && git pull
+cd ~/rugby-app && git pull
 deploy/apptainer/rugby.sh build && deploy/apptainer/rugby.sh restart
 ```
 
@@ -48,14 +51,15 @@ Install the user service once:
 
 ```bash
 mkdir -p ~/.config/systemd/user
-sed "s#/srv/rugby/app#$PWD#" deploy/apptainer/rugby.service > ~/.config/systemd/user/rugby.service
+cp deploy/apptainer/rugby.service ~/.config/systemd/user/rugby.service
+# The unit assumes ~/rugby-app; edit ExecStart/ExecStop in the copied file if you cloned elsewhere.
 systemctl --user daemon-reload && systemctl --user enable --now rugby
 loginctl enable-linger "$USER"
 ```
 
 ## Backups
 
-`deploy/apptainer/rugby.sh backup /srv/backups/rugby` writes a `pg_dump` and keeps the last
+`deploy/apptainer/rugby.sh backup ~/rugby-backups` writes a `pg_dump` and keeps the last
 30. Add it to your crontab nightly. Back up `DATA_DIR/media/originals` under IT's storage
 policy; proxies, thumbnails and exports can be regenerated.
 

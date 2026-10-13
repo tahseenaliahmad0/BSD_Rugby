@@ -75,7 +75,7 @@ The college server runs Apptainer, not Docker. The full procedure is in
 `deploy/apptainer/README.md`; in short:
 
 ```bash
-git clone <this repository> /srv/rugby/app && cd /srv/rugby/app
+cd ~ && git clone <this repository> rugby-app && cd ~/rugby-app   # no root needed: everything lives in your home
 cp deploy/apptainer/rugby.env.example deploy/apptainer/rugby.env   # edit: DATA_DIR, SITE_ADDRESS, passwords
 deploy/apptainer/rugby.sh build      # four .sif images (backend, caddy, postgres, redis)
 deploy/apptainer/rugby.sh start      # six instances on the host network
