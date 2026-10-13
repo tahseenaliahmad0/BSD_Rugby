@@ -16,6 +16,9 @@
 	# internal only), so with rootless ports it would send browsers to https://host/ and
 	# lose :8443. The redirect below includes the real port.
 	auto_https disable_redirects
+	# Caddy would otherwise try to add its local CA to the system trust store at every start,
+	# which fails without root and only produces an error line in the log.
+	skip_install_trust
 }
 
 http:// {

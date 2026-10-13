@@ -32,7 +32,9 @@ deploy/apptainer/rugby.sh start
 deploy/apptainer/rugby.sh create-admin          # prompts for the admin password
 ```
 
-Then open `https://<SITE_ADDRESS>:8443`. The browser warns about the certificate until you
+Then open `https://<SITE_ADDRESS>:8443`. Caddy also answers for the server's own host name
+and IP address (`hostname -f`, `hostname -I`), so `https://<server-ip>:8443` works from the
+college network without any configuration. The browser warns about the certificate until you
 either install the college certificate (copy `tls.caddy.example` to `tls.caddy`, set
 `CERTS_DIR` in `rugby.env`, restart) or trust Caddy's local authority.
 
@@ -129,5 +131,9 @@ Errors seen on the college server and what they mean:
 - `caddy: Value too large for data type` in `logs caddy`: the binary carries a file
   capability (the official image sets `cap_net_bind_service`), which a rootless run cannot
   execute. `rugby.sh build caddy` rebuilds the image without it.
+- `/api/health` answers but the site itself is a 404 page: the frontend was copied to
+  `/srv/dist` instead of `/srv` by an older `caddy.def`; `rugby.sh build caddy` fixes it.
+- `failed to install root certificate ... tee: exit status 1` in `logs caddy`: harmless,
+  Caddy tried to add its local CA to the system trust store; newer Caddyfiles skip that.
 - `No module named 'app'` from `create-admin` or `seed`: an old launcher ran the command from
   the host's working directory; `git pull` fixes it.

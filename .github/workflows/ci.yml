@@ -124,6 +124,7 @@ jobs:
           apptainer exec backend.sif python -c "import app.main; print('backend image ok')"
           apptainer exec backend.sif ffmpeg -version | head -1
           apptainer exec caddy.sif caddy version
+          apptainer exec caddy.sif test -f /srv/index.html
           apptainer exec --env "SITE_ADDRESSES=example.edu, localhost, 127.0.0.1" --env HTTP_PORT=8080 --env HTTPS_PORT=8443 \
             --env API_UPSTREAM=127.0.0.1:8000 --env MEDIA_ROOT=/srv/media \
             caddy.sif caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

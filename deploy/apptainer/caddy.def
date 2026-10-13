@@ -35,8 +35,11 @@ Stage: final
 %files from caddy
     /usr/bin/caddy /opt/caddy-from-image
 
+# Apptainer copies a directory INTO an existing destination (/src/dist -> /srv/dist), unlike
+# Docker's COPY which merges its contents. So stage the build somewhere new and move the
+# contents into /srv in %post, where `test` makes the build fail if the layout is wrong.
 %files from build
-    /src/dist /srv
+    /src/dist /opt/frontend
 
 %files
     ../Caddyfile /etc/caddy/Caddyfile
@@ -54,6 +57,9 @@ Stage: final
     rm -f /opt/caddy-from-image
     chmod 0755 /usr/bin/caddy
     mkdir -p /config /data /srv /etc/caddy
+    cp -a /opt/frontend/. /srv/
+    rm -rf /opt/frontend
+    test -f /srv/index.html
     /usr/bin/caddy version
 
 %environment

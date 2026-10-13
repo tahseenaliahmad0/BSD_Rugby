@@ -171,10 +171,13 @@ backend_env_file() {
 }
 
 site_addresses() {
-  # Caddy serves the configured name plus localhost and 127.0.0.1, so the app also answers
-  # through an SSH tunnel (ssh -L 8443:127.0.0.1:8443) whatever SITE_ADDRESS is.
+  # Caddy serves the configured name plus localhost, 127.0.0.1 and this machine's own host
+  # names and IPv4 addresses, so the app answers through an SSH tunnel and directly by name or
+  # IP from the college network. Set SITE_ADDRESSES in rugby.env to control the list yourself.
+  if [ -n "${SITE_ADDRESSES:-}" ]; then echo "$SITE_ADDRESSES"; return; fi
   local list="$SITE_ADDRESS" extra
-  for extra in localhost 127.0.0.1; do
+  for extra in localhost 127.0.0.1 $(hostname -s 2>/dev/null) $(hostname -f 2>/dev/null) \
+               $(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'); do
     case ", $list, " in *", $extra, "*) ;; *) list="$list, $extra" ;; esac
   done
   echo "$list"
@@ -315,7 +318,7 @@ cmd_start() {
   start_backend worker-cpu worker-cpu ${nv:+$nv}
   start_backend worker-gpu worker-gpu ${nv:+$nv}
   start_caddy
-  log "started. Open https://$SITE_ADDRESS:$HTTPS_PORT, or https://localhost:$HTTPS_PORT through an SSH tunnel (GPU: ${nv:-not used}). Logs: $DATA_DIR/logs"
+  log "started. Caddy answers for: $(site_addresses) on port $HTTPS_PORT (GPU: ${nv:-not used}). Logs: $DATA_DIR/logs"
 }
 
 probe() {   # probe <label> <url> [curl args...]: prints the response body and HTTP status
