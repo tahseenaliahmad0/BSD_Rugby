@@ -119,8 +119,11 @@ Check these the first time:
    complains about permissions on `/var/lib/postgresql/data`, make sure `DATA_DIR/postgres`
    is empty and owned by you.
 4. `curl -k https://localhost:8443/api/health` returns `{"status":"ok","database":"ok"}`.
-5. Sign in, upload a short clip, and check `rugby.sh logs worker-cpu` for the transcode and
-   whether it chose `h264_nvenc` or `libx264`.
+5. Sign in. The administrator account sees a "No squads yet" screen with a form: create the
+   first squad there (later ones from the menu under your name). Each squad starts with the
+   default tagging template for its form of the game.
+6. Upload a short clip, and check `rugby.sh logs worker-cpu` for the transcode and whether it
+   chose `h264_nvenc` or `libx264`.
 
 Errors seen on the college server and what they mean:
 

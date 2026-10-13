@@ -4,14 +4,17 @@ import {
   Container,
   Group,
   Menu,
+  Modal,
   Select,
   Text,
   UnstyledButton,
 } from '@mantine/core';
-import { IconChevronDown, IconLogout, IconUser } from '@tabler/icons-react';
+import { useDisclosure } from '@mantine/hooks';
+import { IconChevronDown, IconLogout, IconPlus, IconUser } from '@tabler/icons-react';
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useLogout, useSquads } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
+import { CreateSquadForm } from './CreateSquadForm';
 import { lastSquad, rememberSquad } from './squadMemory';
 
 export function Shell() {
@@ -21,6 +24,7 @@ export function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useLogout();
+  const [newSquadOpen, newSquad] = useDisclosure(false);
 
   const options = (squads ?? []).map((s) => ({ value: s.id, label: s.name }));
   const squadId = squadParam ?? lastSquad() ?? options[0]?.value ?? null;
@@ -91,6 +95,11 @@ export function Shell() {
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Label>{me.email}</Menu.Label>
+                {me.is_superadmin && (
+                  <Menu.Item leftSection={<IconPlus size={18} />} onClick={newSquad.open} data-testid="new-squad">
+                    New squad
+                  </Menu.Item>
+                )}
                 <Menu.Item
                   leftSection={<IconLogout size={18} />}
                   onClick={() => logout.mutate(undefined, { onSuccess: () => navigate('/login') })}
@@ -108,6 +117,9 @@ export function Shell() {
           <Outlet />
         </Container>
       </AppShell.Main>
+      <Modal opened={newSquadOpen} onClose={newSquad.close} title="New squad">
+        {newSquadOpen && <CreateSquadForm onDone={newSquad.close} />}
+      </Modal>
     </AppShell>
   );
 }

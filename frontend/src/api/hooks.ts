@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, queryString } from './client';
-import type { Event, EventCreate, Job, Me, Opponent, Season, Squad, Video } from './types';
+import type { Event, EventCreate, Job, Me, Opponent, Season, SportVariant, Squad, Video } from './types';
 
 export const keys = {
   me: ['me'] as const,
@@ -52,6 +52,17 @@ export function useLogout() {
 
 export function useSquads() {
   return useQuery({ queryKey: keys.squads, queryFn: () => api<Squad[]>('/api/squads') });
+}
+
+export function useCreateSquad() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; sport_variant: SportVariant }) =>
+      api<Squad>('/api/squads', { method: 'POST', body }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.squads });
+    },
+  });
 }
 
 export function useSeasons(squadId: string) {
