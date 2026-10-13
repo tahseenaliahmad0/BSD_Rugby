@@ -60,7 +60,13 @@ def transcode(db: Session, job: Job, video: Video, storage: Storage, settings: S
         set_progress(db, job, 0.9, "Making the poster and thumbnails")
         proxy_info = ffmpeg.probe(proxy, settings)
         ffmpeg.make_poster(proxy, poster, proxy_info.duration_s, settings)
-        count = ffmpeg.make_thumbnails(proxy, thumbs_dir, proxy_info.duration_s, settings)
+        count = ffmpeg.make_thumbnails(
+            proxy,
+            thumbs_dir,
+            proxy_info.duration_s,
+            settings,
+            on_progress=lambda fraction: set_progress(db, job, 0.9 + 0.1 * fraction),
+        )
 
         video.proxy_path = storage.relpath(proxy)
         video.poster_path = storage.relpath(poster)

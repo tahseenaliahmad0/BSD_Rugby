@@ -253,8 +253,20 @@ def make_poster(proxy: Path, target: Path, duration_s: float, settings: Settings
         raise FFmpegError(f"poster failed: {result.stderr.strip()[-2000:]}")
 
 
-def make_thumbnails(proxy: Path, out_dir: Path, duration_s: float, settings: Settings) -> int:
-    """One JPEG every `thumbnail_interval_s` seconds plus a WebVTT index. Returns the count."""
+def make_thumbnails(
+    proxy: Path,
+    out_dir: Path,
+    duration_s: float,
+    settings: Settings,
+    on_progress: Callable[[float], None] | None = None,
+) -> int:
+    """One JPEG every `thumbnail_interval_s` seconds plus a WebVTT index. Returns the count.
+
+    The proxy has a keyframe every second, so the decoder is told to skip everything but
+    keyframes (`-skip_frame nokey`): a 90-minute match then means decoding ~5,400 frames
+    instead of ~160,000, which turns minutes into seconds. Each thumbnail is the keyframe
+    nearest its slot, at most half a second from the exact time.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     interval = max(1, settings.thumbnail_interval_s)
     cmd = [
@@ -264,17 +276,23 @@ def make_thumbnails(proxy: Path, out_dir: Path, duration_s: float, settings: Set
         "-y",
         "-v",
         "error",
+        "-skip_frame",
+        "nokey",
         "-i",
         str(proxy),
         "-vf",
         f"fps=1/{interval},scale={settings.thumbnail_width}:-2",
         "-q:v",
         "5",
+        "-progress",
+        "pipe:1",
+        "-nostats",
         str(out_dir / "%05d.jpg"),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise FFmpegError(f"thumbnails failed: {result.stderr.strip()[-2000:]}")
+    try:
+        run_with_progress(cmd, duration_s, on_progress)
+    except FFmpegError as exc:
+        raise FFmpegError(f"thumbnails failed: {exc}") from exc
     files = sorted(out_dir.glob("*.jpg"))
     lines = ["WEBVTT", ""]
     for index, _file in enumerate(files, start=1):
