@@ -1,7 +1,11 @@
 # Caddy with the built frontend, for Apptainer. Two stages: build the frontend with Node, then
 # copy only the built files into the Caddy image. Mirrors deploy/caddy/Dockerfile.
+#
+# The build stage uses the Debian-based Node image on purpose: Apptainer's fakeroot helper is
+# a glibc binary and cannot run inside an Alpine (musl) image, so a %post section there fails
+# with "exec /.singularity.d/libs/fakeroot failed". The final stage is Alpine but has no %post.
 Bootstrap: docker
-From: node:22-alpine
+From: node:22-bookworm-slim
 Stage: build
 
 %files

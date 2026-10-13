@@ -6,9 +6,10 @@ background instances, one data directory. Decisions in `docs/decisions/0009-appt
 ## What you need on the server
 
 - Apptainer 1.1 or newer (`apptainer --version`). Building the backend and Caddy images
-  installs packages, which needs either `--fakeroot` (ask IT to enable it: `apptainer config
-  fakeroot --add $USER`) or building the images on another machine and copying the `.sif`
-  files into `deploy/apptainer/images/`.
+  installs packages under `--fakeroot`. On most installs this works out of the box through a
+  root-mapped user namespace (the build prints "trying root-mapped namespace"); if it refuses,
+  ask IT for `apptainer config fakeroot --add $USER`, or build on another machine and copy the
+  `.sif` files into `deploy/apptainer/images/`.
 - Outbound network during `build` (Docker Hub, Debian, PyPI, npm).
 - For the GPU: the NVIDIA driver on the host and `nvidia-smi` on your PATH (Apptainer's
   `--nv` does the rest). Without a GPU everything runs on the CPU.
@@ -26,6 +27,7 @@ cd ~/Desktop/bsd
 cp deploy/apptainer/rugby.env.example deploy/apptainer/rugby.env
 nano deploy/apptainer/rugby.env                 # DATA_DIR, SITE_ADDRESS, passwords, admin
 deploy/apptainer/rugby.sh build                 # 10 to 20 minutes the first time
+# (rugby.sh build caddy   rebuilds one image; names: postgres redis backend caddy)
 deploy/apptainer/rugby.sh start
 deploy/apptainer/rugby.sh create-admin          # prompts for the admin password
 ```

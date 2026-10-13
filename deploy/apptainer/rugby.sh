@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the rugby video analysis app with Apptainer (no Docker, no root).
 #
-#   deploy/apptainer/rugby.sh build          build the four images (needs network; may need --fakeroot)
+#   deploy/apptainer/rugby.sh build [name...] build the four images, or just the named ones
+#                                            (postgres redis backend caddy); needs network
 #   deploy/apptainer/rugby.sh start          start postgres, redis, api, workers, caddy as instances
 #   deploy/apptainer/rugby.sh stop | restart | status
 #   deploy/apptainer/rugby.sh logs <service> [-f]
@@ -145,20 +146,31 @@ export_sources() {
   rm -rf "$HERE/build/backend/tests"
 }
 
+build_one() {
+  local name="$1"
+  case "$name" in
+    postgres|redis)
+      log "building $name.sif"
+      run "$APPTAINER" build --force "$IMAGES_DIR/$name.sif" "$HERE/$name.def"
+      ;;
+    backend|caddy)
+      local fakeroot=()
+      if [ "${FAKEROOT:-auto}" != "no" ] && [ "$(id -u)" != "0" ]; then fakeroot=(--fakeroot); fi
+      if [ "$name" = backend ]; then log "building backend.sif (installs ffmpeg and Python packages)"; else log "building caddy.sif (builds the frontend)"; fi
+      (cd "$HERE" && run "$APPTAINER" build --force "${fakeroot[@]}" "$IMAGES_DIR/$name.sif" "$HERE/$name.def")
+      ;;
+    *) die "unknown image '$name' (postgres, redis, backend, caddy)" ;;
+  esac
+}
+
 cmd_build() {
   need_apptainer
   mkdir -p "$IMAGES_DIR"
+  local names=("$@")
+  [ ${#names[@]} -eq 0 ] && names=(postgres redis backend caddy)
   export_sources
-  local fakeroot=()
-  if [ "${FAKEROOT:-auto}" != "no" ] && [ "$(id -u)" != "0" ]; then fakeroot=(--fakeroot); fi
-  log "building postgres.sif"
-  run "$APPTAINER" build --force "$IMAGES_DIR/postgres.sif" "$HERE/postgres.def"
-  log "building redis.sif"
-  run "$APPTAINER" build --force "$IMAGES_DIR/redis.sif" "$HERE/redis.def"
-  log "building backend.sif (installs ffmpeg and Python packages)"
-  (cd "$HERE" && run "$APPTAINER" build --force "${fakeroot[@]}" "$IMAGES_DIR/backend.sif" "$HERE/backend.def")
-  log "building caddy.sif (builds the frontend)"
-  (cd "$HERE" && run "$APPTAINER" build --force "${fakeroot[@]}" "$IMAGES_DIR/caddy.sif" "$HERE/caddy.def")
+  local name
+  for name in "${names[@]}"; do build_one "$name"; done
   rm -rf "$HERE/build"
   log "images in $IMAGES_DIR"
 }
@@ -305,7 +317,7 @@ UNIT
 }
 
 case "${1:-}" in
-  build) cmd_build ;;
+  build) shift; cmd_build "$@" ;;
   start) cmd_start ;;
   stop) cmd_stop ;;
   restart) cmd_stop; cmd_start ;;
