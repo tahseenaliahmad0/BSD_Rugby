@@ -98,3 +98,15 @@ Check these the first time:
 4. `curl -k https://localhost:8443/api/health` returns `{"status":"ok","database":"ok"}`.
 5. Sign in, upload a short clip, and check `rugby.sh logs worker-cpu` for the transcode and
    whether it chose `h264_nvenc` or `libx264`.
+
+Errors seen on the college server and what they mean:
+
+- `failed to connect to dbus` from `apptainer instance start`: rootless instances need a
+  systemd user session. The launcher no longer uses instances.
+- `exec /.singularity.d/libs/fakeroot failed` while building: a `%post` section in an Alpine
+  stage. All stages with `%post` use Debian bases.
+- `caddy: Value too large for data type` in `logs caddy`: the binary carries a file
+  capability (the official image sets `cap_net_bind_service`), which a rootless run cannot
+  execute. `rugby.sh build caddy` rebuilds the image without it.
+- `No module named 'app'` from `create-admin` or `seed`: an old launcher ran the command from
+  the host's working directory; `git pull` fixes it.

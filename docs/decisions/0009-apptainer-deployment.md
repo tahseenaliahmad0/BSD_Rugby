@@ -31,6 +31,13 @@ systemd user bus, and the server has no user session bus ("failed to connect to 
 - A rootless process cannot bind ports 80 and 443, so Caddy listens on 8080 and 8443 by
   default. IT can lower `net.ipv4.ip_unprivileged_port_start` to allow 443, or front the app
   with the college's own reverse proxy.
+- The Caddy image is assembled on Debian from the official image's binary rather than run as
+  is. The official image gives `/usr/bin/caddy` the `cap_net_bind_service` file capability;
+  inside a rootless user namespace the kernel cannot map that capability's owner and refuses
+  to execute the file ("Value too large for data type"). Re-copying the binary drops the
+  attribute, and the ports above do not need it. Images for Apptainer must not carry file
+  capabilities, and `%post` sections must run on glibc bases (Apptainer's fakeroot helper
+  cannot run in Alpine).
 - All state lives under one `DATA_DIR` on the host (postgres, media, caddy certificates,
   logs); images are read-only. The GPU is given to both workers so FFmpeg can use NVENC.
 - After a reboot, `rugby.sh install-service` writes a user systemd unit when the server has a

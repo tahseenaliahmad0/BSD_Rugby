@@ -1,9 +1,16 @@
-# Caddy with the built frontend, for Apptainer. Two stages: build the frontend with Node, then
-# copy only the built files into the Caddy image. Mirrors deploy/caddy/Dockerfile.
+# Caddy with the built frontend, for Apptainer. Three stages: build the frontend with Node,
+# take the Caddy binary from the official image, and assemble a small Debian image with
+# both. Mirrors deploy/caddy/Dockerfile.
 #
-# The build stage uses the Debian-based Node image on purpose: Apptainer's fakeroot helper is
-# a glibc binary and cannot run inside an Alpine (musl) image, so a %post section there fails
-# with "exec /.singularity.d/libs/fakeroot failed". The final stage is Alpine but has no %post.
+# Why not run the official caddy:2-alpine image directly, as the Dockerfile does?
+# 1. The official image gives /usr/bin/caddy the file capability cap_net_bind_service (so it
+#    can bind 80/443 as non-root under Docker). In a rootless Apptainer run the kernel cannot
+#    map that capability's owner into the user namespace and refuses to execute the file at
+#    all: "caddy: Value too large for data type" (EOVERFLOW). We listen on 8080/8443 and do
+#    not need the capability, so the binary is re-copied here, which drops the attribute.
+# 2. Apptainer's fakeroot helper is a glibc binary and cannot run inside an Alpine (musl)
+#    image, so a %post section there fails with "exec /.singularity.d/libs/fakeroot failed".
+#    Debian stages have no such problem (the backend image builds the same way).
 Bootstrap: docker
 From: node:22-bookworm-slim
 Stage: build
@@ -19,7 +26,14 @@ Stage: build
 
 Bootstrap: docker
 From: caddy:2-alpine
+Stage: caddy
+
+Bootstrap: docker
+From: debian:bookworm-slim
 Stage: final
+
+%files from caddy
+    /usr/bin/caddy /opt/caddy-from-image
 
 %files from build
     /src/dist /srv
@@ -28,11 +42,29 @@ Stage: final
     ../Caddyfile /etc/caddy/Caddyfile
     ../caddy/tls.dev.caddy /etc/caddy/tls.caddy
 
+%post
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends ca-certificates mailcap
+    rm -rf /var/lib/apt/lists/*
+    # A plain copy writes a new file without the source's extended attributes, so the
+    # cap_net_bind_service capability from the official image does not come along.
+    cp /opt/caddy-from-image /usr/bin/caddy
+    rm -f /opt/caddy-from-image
+    chmod 0755 /usr/bin/caddy
+    mkdir -p /config /data /srv /etc/caddy
+    /usr/bin/caddy version
+
+%environment
+    export XDG_CONFIG_HOME=/config
+    export XDG_DATA_HOME=/data
+
 %startscript
-    exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    exec /usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 
 %runscript
-    exec caddy "$@"
+    exec /usr/bin/caddy "$@"
 
 %help
     Set SITE_ADDRESS, HTTP_PORT, HTTPS_PORT, API_UPSTREAM and MEDIA_ROOT. Bind the storage

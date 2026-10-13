@@ -328,8 +328,10 @@ cmd_logs() {
 
 cmd_exec_backend() {
   need_image backend
+  # --pwd /app: apptainer exec keeps the host's working directory, and `python -m app...`
+  # needs to start from the application directory.
   # shellcheck disable=SC2046
-  run "$APPTAINER" exec $(backend_args) "$@"
+  run "$APPTAINER" exec --pwd /app $(backend_args) "$@"
 }
 
 cmd_create_admin() {
@@ -356,7 +358,7 @@ cmd_shell() {
     postgres) run "$APPTAINER" shell --cleanenv --env "PGPASSWORD=$POSTGRES_PASSWORD" "$IMAGES_DIR/postgres.sif" ;;
     caddy) run "$APPTAINER" shell "$IMAGES_DIR/caddy.sif" ;;
     *) # shellcheck disable=SC2046
-       run "$APPTAINER" shell $(backend_args) ;;
+       run "$APPTAINER" shell --pwd /app $(backend_args) ;;
   esac
 }
 
