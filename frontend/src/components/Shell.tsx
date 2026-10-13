@@ -41,9 +41,10 @@ export function Shell() {
         <Container size="xl" h="100%">
           <Group h="100%" justify="space-between" wrap="nowrap" gap="sm">
             <Group gap="sm" wrap="nowrap">
-              <UnstyledButton onClick={() => navigate('/')} aria-label="Home">
-                <Text fw={800} size="xl" c="green.8">
-                  Rugby Video
+              <UnstyledButton onClick={() => navigate('/')} aria-label="Home" className="brand">
+                <Text fw={800} size="xl" c="green.8" style={{ whiteSpace: 'nowrap' }}>
+                  <span className="brand-long">Rugby Video</span>
+                  <span className="brand-short">RV</span>
                 </Text>
               </UnstyledButton>
               {options.length > 0 && (
@@ -60,8 +61,9 @@ export function Shell() {
                       navigate(`/squads/${id}`);
                     }
                   }}
-                  w={200}
+                  w={180}
                   size="sm"
+                  className="squad-switcher"
                   comboboxProps={{ withinPortal: true }}
                 />
               )}
