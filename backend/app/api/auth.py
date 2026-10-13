@@ -13,7 +13,7 @@ from app.core.auth import (
     set_csrf_cookie,
     set_session_cookies,
 )
-from app.core.security import hash_password, password_needs_rehash, verify_password
+from app.core.security import hash_password, new_token, password_needs_rehash, verify_password
 from app.db import get_db
 from app.models import Membership, User
 from app.schemas.auth import LoginIn, MembershipSummary, MeOut, PasswordChange, UserOut
@@ -90,8 +90,6 @@ def me(
 ) -> MeOut:
     csrf = request.cookies.get(settings.csrf_cookie_name)
     if not csrf:
-        from app.core.security import new_token
-
         csrf = new_token()
         set_csrf_cookie(response, csrf, settings)
     return _me(db, user, csrf)
