@@ -6,12 +6,17 @@ export const CSRF_HEADER = 'X-CSRF-Token';
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string;
+  /** The parsed JSON body, when the server sent one (a 409 carries the current tag). */
+  readonly body: unknown;
+  /** Set by callers that know which tag a failed request was about. */
+  conflictTagId?: string;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, body?: unknown) {
     super(detail);
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.body = body;
   }
 }
 
@@ -34,23 +39,27 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-async function detailFrom(response: Response): Promise<string> {
+async function detailFrom(response: Response): Promise<[string, unknown]> {
   try {
     const data = (await response.json()) as { detail?: unknown };
-    if (typeof data.detail === 'string') return data.detail;
+    if (typeof data.detail === 'string') return [data.detail, data];
     if (Array.isArray(data.detail)) {
       // FastAPI validation errors: make them readable.
-      return data.detail
-        .map((d: { loc?: unknown[]; msg?: string }) => {
-          const field = Array.isArray(d.loc) ? d.loc.slice(1).join('.') : '';
-          return field ? `${field}: ${d.msg ?? 'invalid'}` : (d.msg ?? 'invalid');
-        })
-        .join('; ');
+      return [
+        data.detail
+          .map((d: { loc?: unknown[]; msg?: string }) => {
+            const field = Array.isArray(d.loc) ? d.loc.slice(1).join('.') : '';
+            const msg = (d.msg ?? 'invalid').replace(/^Value error, /, '');
+            return field ? `${field}: ${msg}` : msg;
+          })
+          .join('; '),
+        data,
+      ];
     }
   } catch {
     /* fall through */
   }
-  return response.statusText || `Request failed (${response.status})`;
+  return [response.statusText || `Request failed (${response.status})`, undefined];
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -66,7 +75,8 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     signal: options.signal,
   });
   if (!response.ok) {
-    throw new ApiError(response.status, await detailFrom(response));
+    const [detail, body] = await detailFrom(response);
+    throw new ApiError(response.status, detail, body);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;

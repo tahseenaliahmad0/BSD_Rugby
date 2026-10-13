@@ -20,10 +20,15 @@ def event_ms_to_video_seconds(ms: int, offset_ms: int) -> float:
 
 
 def frame_index(seconds: float, fps: Fraction) -> int:
-    """The frame shown at `seconds` (0-based), tolerant of float error at frame boundaries."""
+    """The frame shown at `seconds` (0-based).
+
+    Times that came through integer milliseconds can sit up to half a millisecond before the
+    true frame boundary, so that much tolerance (expressed in frames) is allowed.
+    """
     if seconds <= 0:
         return 0
-    return int(seconds * fps.numerator / fps.denominator + 1e-3)
+    rate = fps.numerator / fps.denominator
+    return int(seconds * rate + 0.0005 * rate + 1e-6)
 
 
 def snap_to_frame(seconds: float, fps: Fraction) -> float:

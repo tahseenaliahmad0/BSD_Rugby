@@ -25,8 +25,16 @@ import {
   IconVolume,
   IconVolumeOff,
 } from '@tabler/icons-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import type { Video } from '../api/types';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import {
   clampTime,
   formatClock,
@@ -57,6 +65,45 @@ type RvfcVideoElement = HTMLVideoElement & {
 
 const SKIP_SECONDS = 5;
 
+/** What the player needs to know about a video; both Video and ClipVideo satisfy it. */
+export interface PlayerVideo {
+  id: string;
+  proxy_url: string | null;
+  poster_url: string | null;
+  fps_num: number | null;
+  fps_den: number | null;
+  duration_s: number | null;
+  frame_count?: number | null;
+  thumbnail_url_template: string | null;
+  thumbnail_interval_s: number | null;
+  thumbnail_count: number | null;
+}
+
+/** Imperative control for the tagging workspace and the playlist player. */
+export interface PlayerHandle {
+  seek(seconds: number): void;
+  play(): void;
+  pause(): void;
+  togglePlay(): void;
+  getTime(): number;
+  isPaused(): boolean;
+}
+
+export interface VideoPlayerProps {
+  video: PlayerVideo;
+  /** Play only this part of the video (seconds); the seek bar covers just this range. */
+  clipStartS?: number;
+  clipEndS?: number;
+  autoPlay?: boolean;
+  onClipEnd?: () => void;
+  /** Called with the displayed media time on every frame or seek. */
+  onTime?: (seconds: number) => void;
+  /** Listen for keyboard shortcuts on the whole page (default true). */
+  keyboard?: boolean;
+  /** Smaller controls for side-by-side layouts. */
+  compact?: boolean;
+}
+
 const SHORTCUTS: Array<[string, string]> = [
   ['Space or K', 'Play / pause'],
   ['L', 'Play faster (up to 2x)'],
@@ -76,13 +123,23 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }
 
-export function VideoPlayer({ video }: { video: Video }) {
+export const VideoPlayer = forwardRef<PlayerHandle, VideoPlayerProps>(function VideoPlayer(
+  { video, clipStartS, clipEndS, autoPlay = false, onClipEnd, onTime, keyboard = true, compact = false },
+  ref,
+) {
   const fps = useMemo<Fps>(
     () => ({ num: video.fps_num ?? 30, den: video.fps_den ?? 1 }),
     [video.fps_num, video.fps_den],
   );
   const duration = video.duration_s ?? 0;
   const lastFrame = lastFrameIndex(duration, fps, video.frame_count);
+  const rangeStart = clipStartS ?? 0;
+  const rangeEnd = clipEndS ?? duration;
+  const onTimeRef = useRef(onTime);
+  onTimeRef.current = onTime;
+  const onClipEndRef = useRef(onClipEnd);
+  onClipEndRef.current = onClipEnd;
+  const clipEndedRef = useRef(false);
 
   const videoRef = useRef<RvfcVideoElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -100,10 +157,20 @@ export function VideoPlayer({ video }: { video: Video }) {
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  const setTime = useCallback((t: number) => {
-    timeRef.current = t;
-    setTimeState(t);
-  }, []);
+  const setTime = useCallback(
+    (t: number) => {
+      timeRef.current = t;
+      setTimeState(t);
+      onTimeRef.current?.(t);
+      if (clipEndS !== undefined && t >= clipEndS - 1e-3 && !clipEndedRef.current) {
+        clipEndedRef.current = true;
+        const el = videoRef.current;
+        if (el && !el.paused) el.pause();
+        onClipEndRef.current?.();
+      }
+    },
+    [clipEndS],
+  );
 
   // Frame-accurate clock: requestVideoFrameCallback reports the media time of the frame on
   // screen. Browsers without it fall back to polling currentTime every animation frame.
@@ -185,12 +252,15 @@ export function VideoPlayer({ video }: { video: Video }) {
     (t: number) => {
       const el = videoRef.current;
       if (!el) return;
-      const target = clampTime(t, duration);
+      const lo = clipStartS ?? 0;
+      const hi = clipEndS ?? duration;
+      const target = clampTime(Math.min(Math.max(t, lo), hi), duration);
+      if (target < hi - 1e-3) clipEndedRef.current = false;
       seekTargetRef.current = target;
       el.currentTime = target;
       setTime(target);
     },
-    [duration, setTime],
+    [clipEndS, clipStartS, duration, setTime],
   );
 
   const currentBase = () => seekTargetRef.current ?? timeRef.current;
@@ -199,12 +269,16 @@ export function VideoPlayer({ video }: { video: Video }) {
     const el = videoRef.current;
     if (!el) return;
     if (el.paused) {
-      if (el.ended || (duration > 0 && el.currentTime >= duration - 1e-3)) el.currentTime = 0;
+      const end = clipEndS ?? duration;
+      if (el.ended || (end > 0 && el.currentTime >= end - 1e-3)) {
+        el.currentTime = clipStartS ?? 0;
+        clipEndedRef.current = false;
+      }
       void el.play();
     } else {
       el.pause();
     }
-  }, [duration]);
+  }, [clipEndS, clipStartS, duration]);
 
   const step = useCallback(
     (frames: number) => {
@@ -314,9 +388,42 @@ export function VideoPlayer({ video }: { video: Video }) {
       }
       if (handled) event.preventDefault();
     };
+    if (!keyboard) return undefined;
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [changeRate, duration, fps, seekTo, skip, step, toggleFullscreen, toggleMute, togglePlay, video.frame_count]);
+  }, [changeRate, duration, fps, keyboard, seekTo, skip, step, toggleFullscreen, toggleMute, togglePlay, video.frame_count]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      seek: seekTo,
+      play: () => void videoRef.current?.play(),
+      pause: () => videoRef.current?.pause(),
+      togglePlay,
+      getTime: () => seekTargetRef.current ?? timeRef.current,
+      isPaused: () => videoRef.current?.paused ?? true,
+    }),
+    [seekTo, togglePlay],
+  );
+
+  // A new clip: jump to its start and optionally play.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    clipEndedRef.current = false;
+    const start = clipStartS ?? 0;
+    const go = () => {
+      el.currentTime = start;
+      setTime(start);
+      if (autoPlay) void el.play();
+    };
+    if (el.readyState >= 1) go();
+    else {
+      el.addEventListener('loadedmetadata', go, { once: true });
+      return () => el.removeEventListener('loadedmetadata', go);
+    }
+    return undefined;
+  }, [autoPlay, clipStartS, setTime, video.id]);
 
   // Seek bar.
   const onBarPointerDown = () => {
@@ -335,11 +442,12 @@ export function VideoPlayer({ video }: { video: Video }) {
     if (!bar || duration <= 0) return;
     const rect = bar.getBoundingClientRect();
     const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    setHover({ x: event.clientX - rect.left, t: fraction * duration });
+    setHover({ x: event.clientX - rect.left, t: rangeStart + fraction * rangeLength });
   };
 
   const frame = timeToFrame(time, fps);
-  const progressPercent = duration > 0 ? (time / duration) * 100 : 0;
+  const rangeLength = Math.max(0.001, rangeEnd - rangeStart);
+  const progressPercent = Math.min(100, Math.max(0, ((time - rangeStart) / rangeLength) * 100));
   const thumbs =
     video.thumbnail_url_template && video.thumbnail_interval_s && video.thumbnail_count
       ? {
@@ -349,6 +457,8 @@ export function VideoPlayer({ video }: { video: Video }) {
         }
       : null;
 
+  const big = compact ? 'lg' : 'xl';
+  const playSize = compact ? 44 : 56;
   return (
     <div ref={rootRef} className="player-root" data-testid="player">
       <Stack gap="sm">
@@ -384,10 +494,10 @@ export function VideoPlayer({ video }: { video: Video }) {
             ref={barRef}
             type="range"
             className="seek-bar"
-            min={0}
-            max={duration || 0}
+            min={rangeStart}
+            max={rangeEnd || 0}
             step={1 / fpsValue(fps)}
-            value={Math.min(time, duration || 0)}
+            value={Math.min(Math.max(time, rangeStart), rangeEnd || 0)}
             onChange={(e) => seekTo(Number(e.currentTarget.value))}
             onPointerDown={onBarPointerDown}
             onPointerUp={onBarPointerUp}
@@ -403,35 +513,35 @@ export function VideoPlayer({ video }: { video: Video }) {
         <Group justify="space-between" wrap="wrap" gap="md">
           <Group gap="xs" wrap="nowrap">
             <Tooltip label={`Back ${SKIP_SECONDS} seconds (Shift + ←)`}>
-              <ActionIcon size="xl" variant="light" onClick={() => skip(-SKIP_SECONDS)} aria-label={`Back ${SKIP_SECONDS} seconds`}>
+              <ActionIcon size={big} variant="light" onClick={() => skip(-SKIP_SECONDS)} aria-label={`Back ${SKIP_SECONDS} seconds`}>
                 <IconRewindBackward5 size={26} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Previous frame (←)">
-              <ActionIcon size="xl" variant="light" onClick={() => step(-1)} aria-label="Previous frame" data-testid="player-step-back">
+              <ActionIcon size={big} variant="light" onClick={() => step(-1)} aria-label="Previous frame" data-testid="player-step-back">
                 <IconPlayerSkipBack size={26} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Play / pause (Space or K)">
-              <ActionIcon size={56} variant="filled" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'} data-testid="player-play">
+              <ActionIcon size={playSize} variant="filled" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'} data-testid="player-play">
                 {playing ? <IconPlayerPause size={32} /> : <IconPlayerPlay size={32} />}
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Next frame (→)">
-              <ActionIcon size="xl" variant="light" onClick={() => step(1)} aria-label="Next frame" data-testid="player-step-forward">
+              <ActionIcon size={big} variant="light" onClick={() => step(1)} aria-label="Next frame" data-testid="player-step-forward">
                 <IconPlayerSkipForward size={26} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label={`Forward ${SKIP_SECONDS} seconds (Shift + →)`}>
-              <ActionIcon size="xl" variant="light" onClick={() => skip(SKIP_SECONDS)} aria-label={`Forward ${SKIP_SECONDS} seconds`}>
+              <ActionIcon size={big} variant="light" onClick={() => skip(SKIP_SECONDS)} aria-label={`Forward ${SKIP_SECONDS} seconds`}>
                 <IconRewindForward5 size={26} />
               </ActionIcon>
             </Tooltip>
           </Group>
 
           <Stack gap={0} align="center" className="readout">
-            <Text fw={700} size="xl" data-testid="player-time">
-              {formatClock(time, true)} <Text span c="dimmed" fw={400}>/ {formatClock(duration)}</Text>
+            <Text fw={700} size={compact ? 'lg' : 'xl'} data-testid="player-time">
+              {formatClock(time, true)} <Text span c="dimmed" fw={400}>/ {formatClock(rangeEnd)}</Text>
             </Text>
             <Text size="sm" c="dimmed" data-testid="player-frame">
               Frame {frame} of {lastFrame + 1} · {formatTimecode(time, fps)} · {fpsValue(fps).toFixed(2)} fps
@@ -497,4 +607,4 @@ export function VideoPlayer({ video }: { video: Video }) {
       </Stack>
     </div>
   );
-}
+});

@@ -9,7 +9,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconAlertCircle, IconArrowLeft, IconPlayerPlay } from '@tabler/icons-react';
+import { IconAlertCircle, IconArrowLeft, IconPlayerPlay, IconTags } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useEvent } from '../api/hooks';
@@ -73,6 +73,11 @@ export function MatchPage() {
             {event.is_home === true ? ' · Home' : event.is_home === false ? ' · Away' : ''}
           </Text>
         </div>
+        {editable && readyVideos.length > 0 && (
+          <Button component={Link} to={`/matches/${event.id}/tag`} size="lg" leftSection={<IconTags size={20} />} data-testid="tag-match">
+            Tag this match
+          </Button>
+        )}
       </Group>
 
       {selected && (

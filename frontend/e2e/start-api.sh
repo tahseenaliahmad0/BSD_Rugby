@@ -17,5 +17,5 @@ export ADMIN_NAME="Demo Admin"
 
 uv run alembic downgrade base >/dev/null
 uv run alembic upgrade head >/dev/null
-uv run python -m app.scripts.seed 3
+uv run python -m app.scripts.seed 12
 exec uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-level warning

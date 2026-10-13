@@ -19,8 +19,10 @@ when values are added and rounded in several places.
   `round(seconds * 1000) + offset_ms`; event ms -> video seconds is `(ms - offset_ms) / 1000`.
 - The player snaps a time to a frame before converting: frame index from the exact rational
   frame rate, then the frame start in seconds, then milliseconds. At 29.97 fps a frame start
-  is not a whole millisecond; the sub-millisecond rounding is far below a frame (33 ms) and
-  the frame-index maths tolerate it (ADR 0005).
+  is not a whole millisecond; rounding moves it by at most half a millisecond, so the
+  millisecond-to-frame conversion allows half a millisecond of tolerance before flooring,
+  and a frame number survives a round trip through milliseconds at any frame rate up to
+  several hundred fps.
 - Lead and lag on template buttons are milliseconds too.
 
 ## Consequences
