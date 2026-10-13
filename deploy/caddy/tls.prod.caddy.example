@@ -1,0 +1,2 @@
+# Production: a certificate that college laptops trust, mounted at /certs by the Compose file.
+tls /certs/fullchain.pem /certs/privkey.pem

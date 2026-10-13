@@ -1,0 +1,2 @@
+# Development: Caddy's own certificate authority. Browsers warn unless you run `caddy trust`.
+tls internal

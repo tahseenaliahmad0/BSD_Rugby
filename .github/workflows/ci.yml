@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  checks-and-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rugby
+          POSTGRES_PASSWORD: rugby
+          POSTGRES_DB: rugby
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rugby" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+pg8000://rugby:rugby@localhost:5432/rugby_test
+      E2E_DATABASE_URL: postgresql+pg8000://rugby:rugby@localhost:5432/rugby_e2e
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Create test databases
+        run: |
+          PGPASSWORD=rugby psql -h localhost -U rugby -d rugby -c "CREATE DATABASE rugby_test"
+          PGPASSWORD=rugby psql -h localhost -U rugby -d rugby -c "CREATE DATABASE rugby_e2e"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: make setup
+
+      - name: Lint, format and type checks
+        run: make check
+
+      - name: Backend and frontend unit tests
+        run: make test
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke test
+        run: make e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
+
+  docker-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build backend
+      - name: Build Caddy + frontend image
+        run: docker build -f deploy/caddy/Dockerfile .
+      - name: Validate Compose files
+        run: |
+          docker compose -f docker-compose.yml config -q
+          SITE_ADDRESS=example.edu DATA_DIR=/tmp/rugby CERTS_DIR=/tmp/certs \
+            docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml config -q

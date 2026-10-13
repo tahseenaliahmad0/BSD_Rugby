@@ -1,0 +1,48 @@
+# Single entry point: HTTPS, the built frontend, the API, and video files with range requests.
+#
+# SITE_ADDRESS   the hostname Caddy serves (default localhost)
+# /etc/caddy/tls.caddy   `tls internal` for development, or `tls <cert> <key>` in production
+{
+	admin off
+}
+
+{$SITE_ADDRESS:localhost} {
+	import /etc/caddy/tls.caddy
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy same-origin
+	}
+
+	# API (and tus uploads). Bodies stream straight through; no size limit for match files.
+	handle /api/* {
+		reverse_proxy api:8000 {
+			flush_interval -1
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	# Video, posters and thumbnails: ask the API whether this user may see this file, then let
+	# Caddy serve it from the storage volume with HTTP range requests.
+	handle /media/* {
+		forward_auth api:8000 {
+			uri /api/media/authorize
+		}
+		uri strip_prefix /media
+		root * /data
+		header Cache-Control "private, max-age=3600"
+		file_server
+	}
+
+	# The React app. Unknown paths fall back to index.html for client-side routing.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,94 @@
+# Development stack. Runs on a Mac or Windows laptop with no GPU:
+#   docker compose up --build
+# then open https://localhost (accept the local certificate) and sign in with the seed admin.
+# Production adds deploy/docker-compose.prod.yml on top; see README.md.
+
+x-backend: &backend
+  build: ./backend
+  environment: &backend-env
+    APP_ENV: ${APP_ENV:-development}
+    DATABASE_URL: postgresql+pg8000://${POSTGRES_USER:-rugby}:${POSTGRES_PASSWORD:-rugby}@postgres:5432/${POSTGRES_DB:-rugby}
+    REDIS_URL: redis://redis:6379/0
+    STORAGE_ROOT: /data
+    COOKIE_SECURE: "true"
+    API_SERVES_MEDIA: "false"
+    TRANSCODE_ENCODER: ${TRANSCODE_ENCODER:-auto}
+    ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+    ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-now}
+    ADMIN_NAME: ${ADMIN_NAME:-Admin}
+  volumes:
+    - media:/data
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rugby}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rugby}
+      POSTGRES_DB: ${POSTGRES_DB:-rugby}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rugby} -d ${POSTGRES_DB:-rugby}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    # 7.2 is the last BSD-licensed Redis; Valkey (valkey/valkey:8-alpine) is a drop-in swap.
+    image: redis:7.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    <<: *backend
+    command: ["docker/start-api.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  worker-cpu:
+    <<: *backend
+    command: ["docker/start-worker.sh", "cpu", "1"]
+
+  worker-gpu:
+    # Stub until the AI milestones: consumes the gpu queue, runs without a GPU in development.
+    <<: *backend
+    command: ["docker/start-worker.sh", "gpu", "1"]
+    environment:
+      <<: *backend-env
+      GPU_ENABLED: "false"
+
+  caddy:
+    build:
+      context: .
+      dockerfile: deploy/caddy/Dockerfile
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - media:/data:ro
+      - caddy_data:/data_caddy
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  media:
+  caddy_data:
+  caddy_config:

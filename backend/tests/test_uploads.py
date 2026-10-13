@@ -50,7 +50,7 @@ def _tus_upload(client: ApiClient, event_id: str, clip: Path, chunk: int) -> str
         },
     )
     assert created.status_code == 201, created.text
-    location = created.headers["Location"]
+    location: str = created.headers["Location"]
     assert location.startswith("/api/uploads/")
     offset = 0
     while offset < len(data):
@@ -204,7 +204,7 @@ def test_upload_permissions_and_protocol_errors(
             "Upload-Metadata": _metadata(eventId=match["id"], filename="a.mp4"),
         },
     )
-    location = created.headers["Location"]
+    location: str = created.headers["Location"]
     wrong_type = client.patch(location, content=b"12345", headers={**TUS, "Upload-Offset": "0"})
     assert wrong_type.status_code == 415
     ok = client.patch(

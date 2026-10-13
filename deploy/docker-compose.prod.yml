@@ -1,0 +1,62 @@
+# Production overlay for the college server:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+# Copy deploy/.env.production.example to .env in the repository root and fill it in first.
+
+services:
+  postgres:
+    restart: unless-stopped
+    volumes:
+      - ${DATA_DIR:?set DATA_DIR in .env}/postgres:/var/lib/postgresql/data
+
+  redis:
+    restart: unless-stopped
+
+  api:
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+    volumes:
+      - ${DATA_DIR}/media:/data
+
+  worker-cpu:
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+    volumes:
+      - ${DATA_DIR}/media:/data
+    # Give the transcode worker the GPU too so FFmpeg can use NVENC (TRANSCODE_ENCODER=auto).
+    # Remove this block on a server without the NVIDIA Container Toolkit.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, video]
+
+  worker-gpu:
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      GPU_ENABLED: "true"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+    volumes:
+      - ${DATA_DIR}/media:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  caddy:
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+    volumes:
+      - ${DATA_DIR}/media:/data:ro
+      - ${CERTS_DIR:?set CERTS_DIR in .env}:/certs:ro
+      - ./deploy/caddy/tls.prod.caddy:/etc/caddy/tls.caddy:ro
+      - caddy_data:/data_caddy
+      - caddy_config:/config
