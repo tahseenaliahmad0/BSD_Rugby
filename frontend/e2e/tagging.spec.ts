@@ -6,6 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 const ADMIN = { email: 'admin@example.com', password: 'admin-password-123' };
 
+test.use({ viewport: { width: 1280, height: 1100 } });
+
 async function login(page: Page) {
   await page.goto('/login');
   await page.getByTestId('login-email').fill(ADMIN.email);
@@ -69,7 +71,8 @@ test('tag with hotkeys, fix on the timeline, find clips, build and play a playli
 
   // Fix the tackle on the timeline: drag its body 2 seconds to the right (frame snapped).
   const timeline = page.getByTestId('timeline');
-  const box = (await timeline.boundingBox())!;
+  await timeline.scrollIntoViewIfNeeded();
+  const box = (await timeline.locator('canvas').boundingBox())!;
   const GUTTER = 128, RULER = 26, ROW_H = 30;
   const pxPerMs = (box.width - GUTTER) / 60_000; // the timeline fits 60 s at first
   const tackleRow = 8; // Tackle is the ninth button of the 15s template
@@ -91,23 +94,25 @@ test('tag with hotkeys, fix on the timeline, find clips, build and play a playli
   await page.keyboard.press('Control+y');
   await expect.poll(async () => (await tags(page, eventId)).find((t) => t.code === 'Tackle')!.start_ms).toBeGreaterThan(3500);
 
-  // Split the scrum at the playhead (5 s is its end; move the playhead to 2.5 s first).
-  await page.keyboard.press('Home');
-  await page.keyboard.press('Shift+ArrowRight');
-  await page.keyboard.press('Shift+ArrowLeft');
-  for (let i = 0; i < 2; i++) await page.keyboard.press('Shift+ArrowRight');
-  // playhead now 10 s: back to 2.5 s using the timeline ruler
+  // Split the scrum at the playhead: select it (which seeks to its start), then move the
+  // playhead to 2.5 s with the ruler, then Alt+S.
+  await page.mouse.click(box.x + GUTTER + 2500 * pxPerMs, box.y + RULER + 1 * ROW_H + ROW_H / 2); // the scrum (row 2)
   await page.mouse.click(box.x + GUTTER + 2500 * pxPerMs, box.y + RULER / 2);
-  await page.mouse.click(box.x + GUTTER + 2500 * pxPerMs, box.y + RULER + 1 * ROW_H + ROW_H / 2); // select the scrum (row 2)
   await page.keyboard.press('Alt+s');
   await expect.poll(async () => (await tags(page, eventId)).filter((t) => t.code === 'Scrum').length).toBe(2);
   const scrums = (await tags(page, eventId)).filter((t) => t.code === 'Scrum').sort((a, b) => a.start_ms - b.start_ms);
   expect(scrums[0].end_ms).toBe(scrums[1].start_ms);
   expect(scrums[1].end_ms).toBe(5000);
 
-  // Merge them back with Alt+M after selecting both with Shift+click.
-  await page.mouse.click(box.x + GUTTER + 1000 * pxPerMs, box.y + RULER + 1 * ROW_H + ROW_H / 2);
-  await page.mouse.click(box.x + GUTTER + 4000 * pxPerMs, box.y + RULER + 1 * ROW_H + ROW_H / 2, { modifiers: ['Shift'] });
+  // Merge them back with Alt+M after selecting both by dragging a box across the row
+  // (Shift+click also works for people; headless Chromium does not pass Shift to pointer events).
+  const rowY = box.y + RULER + 1 * ROW_H + ROW_H / 2;
+  await page.mouse.move(box.x + GUTTER + 7000 * pxPerMs, rowY - 10);
+  await page.mouse.down();
+  await page.mouse.move(box.x + GUTTER + 3000 * pxPerMs, rowY, { steps: 4 });
+  await page.mouse.move(box.x + GUTTER + 500 * pxPerMs, rowY + 10, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.getByText('2 selected')).toBeVisible();
   await page.keyboard.press('Alt+m');
   await expect.poll(async () => (await tags(page, eventId)).filter((t) => t.code === 'Scrum').length).toBe(1);
   [scrum] = (await tags(page, eventId)).filter((t) => t.code === 'Scrum');
@@ -129,12 +134,13 @@ test('tag with hotkeys, fix on the timeline, find clips, build and play a playli
   await page.getByTestId('chip-code-Scrum').click();
   await page.getByTestId('chip-outcome-Lost').click();
   await expect(page.getByTestId('clip-count')).toContainText('1 clip');
-  await page.getByTestId('chip-outcome-Lost').click();
-  await expect(page.getByTestId('clip-count')).toContainText('2 clips');
+  // Save the search while it has something in it, then clear it again.
   await page.getByTestId('save-filter').click();
-  await page.getByTestId('save-filter-name').fill('Everything');
+  await page.getByTestId('save-filter-name').fill('Lost scrums');
   await page.getByTestId('save-filter-confirm').click();
   await expect(page.getByTestId('saved-filters')).toBeVisible();
+  await page.getByTestId('chip-outcome-Lost').click();
+  await expect(page.getByTestId('clip-count')).toContainText('2 clips');
 
   await page.getByTestId('add-to-playlist').click();
   await page.getByTestId('new-playlist-name').fill('Demo highlights');

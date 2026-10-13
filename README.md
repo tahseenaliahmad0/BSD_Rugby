@@ -4,9 +4,12 @@ Self-hosted video analysis for the rugby programme: upload match footage, watch 
 frame, and (in later milestones) tag it, build playlists and let AI propose tags. Runs on the
 college GPU server with Docker Compose and is used through a browser on the campus network.
 
-Milestones 0 and 1 are done: sign in, pick a squad, create a match, upload a full-length
-video (resumable), have it transcoded in the background, and watch it in a frame-accurate
-player. See `docs/plan-m0-m1.md` for the plan and `docs/decisions/` for the decisions behind it.
+Milestones 0 to 2 are done: sign in, pick a squad, create a match, upload a full-length
+video (resumable), have it transcoded, watch it frame by frame, tag it with the keyboard, fix
+tags on a timeline, find clips across matches, build and share playlists, read stats and
+export MP4s. See `docs/SPEC.md` (the spec), `docs/plan-m0-m1.md` and `docs/plan-m2.md` for
+the plans, `docs/decisions/` for the decisions behind them, and `docs/guides/` for the
+coach guides.
 
 ## What is in the repository
 
@@ -117,6 +120,27 @@ Transcodes use NVENC automatically when FFmpeg in the worker can reach the GPU
   `requestVideoFrameCallback` for the time readout and steps frames using the exact frame rate.
 - **Data model**: tags live on the event's timeline; each video carries an offset onto it. All
   tables for later milestones (tags, suggestions, playlists, live sessions, imports) exist now.
+
+## Tagging, clips, playlists, stats and exports (Milestone 2)
+
+- **Templates** (analysts): the code window definition per squad. Buttons have a code, label,
+  hotkey, colour, type (instant with lead/lag, or start/stop) and descriptor groups. Saving
+  makes a new version; tags remember the version they were made with. New squads get the
+  rugby union 15s and sevens defaults.
+- **Tagging workspace** (`Tag this match` on a match page): hotkeys create tags at the
+  frame-snapped playhead, Shift+letter sets descriptors on the latest or selected tag, the
+  canvas timeline supports drag, trim, split, merge, multi-select and undo/redo. Every change
+  saves immediately; a concurrent edit of the same tag is reported, never silently overwritten
+  (ADRs 0006 to 0008). See `docs/guides/tagging-a-match.md`.
+- **Find clips** (coaches): plain-language chips, roster and match filters, saved searches,
+  thumbnails, watch a clip, add to a playlist. The search runs server-side on the JSONB
+  descriptors and their GIN index. See `docs/guides/finding-clips.md`.
+- **Playlists**: from a search (with refresh), hand-picked or ad-hoc ranges; continuous
+  playback with next/previous; drag reorder; notes; share with squad staff; duplicate.
+- **Stats**: per match or season, success rates from the template's outcome group, per-player
+  table, CSV, and every number opens as a playlist.
+- **Exports**: a clip or playlist rendered to one MP4 by `worker-cpu` from the originals
+  (proxy fallback), optional caption overlay, listed under Downloads.
 
 ## Keyboard shortcuts in the player
 
