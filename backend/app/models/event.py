@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
-from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -45,8 +45,8 @@ class Event(Base):
     )
     type: Mapped[EventType] = mapped_column(str_enum(EventType, "event_type"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(200))
-    date: Mapped[date] = mapped_column(Date, nullable=False)
-    kickoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    date: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    kickoff_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     venue: Mapped[str | None] = mapped_column(String(200))
     competition: Mapped[str | None] = mapped_column(String(200))
     is_home: Mapped[bool | None] = mapped_column(Boolean)
@@ -54,8 +54,8 @@ class Event(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    created_at: Mapped[datetime] = created_at_col()
-    updated_at: Mapped[datetime] = updated_at_col()
+    created_at: Mapped[dt.datetime] = created_at_col()
+    updated_at: Mapped[dt.datetime] = updated_at_col()
 
     squad: Mapped[Squad] = relationship()
     season: Mapped[Season | None] = relationship()
@@ -99,8 +99,8 @@ class Video(Base):
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    created_at: Mapped[datetime] = created_at_col()
-    updated_at: Mapped[datetime] = updated_at_col()
+    created_at: Mapped[dt.datetime] = created_at_col()
+    updated_at: Mapped[dt.datetime] = updated_at_col()
 
     event: Mapped[Event] = relationship(back_populates="videos")
     jobs: Mapped[list[Job]] = relationship(back_populates="video", order_by="Job.created_at")
@@ -133,9 +133,9 @@ class Upload(Base):
     video_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("videos.id", ondelete="SET NULL")
     )
-    created_at: Mapped[datetime] = created_at_col()
-    updated_at: Mapped[datetime] = updated_at_col()
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[dt.datetime] = created_at_col()
+    updated_at: Mapped[dt.datetime] = updated_at_col()
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     user: Mapped[User] = relationship()
 
@@ -168,8 +168,8 @@ class Job(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
     celery_task_id: Mapped[str | None] = mapped_column(String(100))
-    created_at: Mapped[datetime] = created_at_col()
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = created_at_col()
+    started_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     video: Mapped[Video | None] = relationship(back_populates="jobs")
