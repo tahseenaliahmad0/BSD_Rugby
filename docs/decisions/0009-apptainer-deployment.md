@@ -31,6 +31,9 @@ systemd user bus, and the server has no user session bus ("failed to connect to 
 - A rootless process cannot bind ports 80 and 443, so Caddy listens on 8080 and 8443 by
   default. IT can lower `net.ipv4.ip_unprivileged_port_start` to allow 443, or front the app
   with the college's own reverse proxy.
+- Caddy serves `SITE_ADDRESS`, `localhost` and `127.0.0.1` (the Caddyfile takes a comma-
+  separated `SITE_ADDRESSES`), so the app works through an SSH tunnel from a laptop when the
+  server's port is not reachable directly. Compose passes the single name as before.
 - The Caddy image is assembled on Debian from the official image's binary rather than run as
   is. The official image gives `/usr/bin/caddy` the `cap_net_bind_service` file capability;
   inside a rootless user namespace the kernel cannot map that capability's owner and refuses

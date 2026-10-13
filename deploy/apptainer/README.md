@@ -36,6 +36,25 @@ Then open `https://<SITE_ADDRESS>:8443`. The browser warns about the certificate
 either install the college certificate (copy `tls.caddy.example` to `tls.caddy`, set
 `CERTS_DIR` in `rugby.env`, restart) or trust Caddy's local authority.
 
+`rugby.sh check` is the first thing to run when the site does not open: it prints the
+service table, which ports are listening, and probes the API directly, through Caddy by IP,
+by `localhost` and by the site name, each with the HTTP status.
+
+## From a laptop through SSH
+
+When the server's port is not reachable from your network, tunnel it:
+
+```bash
+ssh -L 8443:127.0.0.1:8443 you@server      # keep this session open
+```
+
+and open `https://localhost:8443` (type the `https://`; a bare `localhost:8443` is sent as
+plain HTTP and Caddy answers "Client sent an HTTP request to an HTTPS server"). Caddy
+serves `localhost` and `127.0.0.1` alongside `SITE_ADDRESS` for this reason. With Caddy's
+own certificate the browser warns once; with a college certificate issued for the real name
+the tunnel still works but the warning is about the name, so either accept it or add
+`127.0.0.1 <SITE_ADDRESS>` to your laptop's hosts file and use the real name.
+
 `rugby.sh status` lists the six services, `rugby.sh logs api` (or `postgres`, `redis`,
 `worker-cpu`, `worker-gpu`, `caddy`; add `-f` to follow) shows their output, `rugby.sh stop`
 stops them all. Logs live in `DATA_DIR/logs`, pid files in `DATA_DIR/run`.
@@ -47,7 +66,9 @@ cd ~/Desktop/bsd && git pull
 deploy/apptainer/rugby.sh build && deploy/apptainer/rugby.sh restart
 ```
 
-Database migrations run when the api instance starts.
+Database migrations run when the api service starts. A change that only touches
+`deploy/Caddyfile` or `rugby.sh` needs no build: the launcher binds the checkout's Caddyfile
+into the Caddy container, so `git pull` and `rugby.sh restart` are enough.
 
 ## After a reboot
 

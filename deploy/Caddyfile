@@ -1,7 +1,9 @@
 # Single entry point: HTTPS, the built frontend, the API, and video files with range requests.
 # The same file serves Docker Compose and Apptainer; the differences are environment variables:
 #
-# SITE_ADDRESS   the hostname Caddy serves (default localhost)
+# SITE_ADDRESSES the names Caddy serves, comma separated (default localhost). The Apptainer
+#                launcher passes the configured hostname plus localhost and 127.0.0.1 so the
+#                app also answers through an SSH tunnel (ssh -L 8443:127.0.0.1:8443)
 # HTTP_PORT, HTTPS_PORT   80 and 443 by default; rootless Apptainer uses 8080 and 8443
 # API_UPSTREAM   api:8000 on the Compose network; 127.0.0.1:8000 on the Apptainer host network
 # MEDIA_ROOT     where the storage volume is mounted read-only (default /srv/media)
@@ -10,9 +12,17 @@
 	admin off
 	http_port {$HTTP_PORT:80}
 	https_port {$HTTPS_PORT:443}
+	# Caddy's own redirect assumes clients reach HTTPS on 443 (https_port is documented as
+	# internal only), so with rootless ports it would send browsers to https://host/ and
+	# lose :8443. The redirect below includes the real port.
+	auto_https disable_redirects
 }
 
-{$SITE_ADDRESS:localhost} {
+http:// {
+	redir https://{http.request.host}:{$HTTPS_PORT:443}{http.request.uri} permanent
+}
+
+{$SITE_ADDRESSES:localhost} {
 	import /etc/caddy/tls.caddy
 	encode zstd gzip
 

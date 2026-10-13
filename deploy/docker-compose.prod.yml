@@ -54,7 +54,7 @@ services:
   caddy:
     restart: unless-stopped
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+      SITE_ADDRESSES: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
     volumes:
       - ${DATA_DIR}/media:/srv/media:ro
       - ${CERTS_DIR:?set CERTS_DIR in .env}:/certs:ro

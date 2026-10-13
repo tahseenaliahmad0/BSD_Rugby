@@ -89,7 +89,7 @@ jobs:
           docker run --rm \
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             -v "$PWD/deploy/caddy/tls.dev.caddy:/etc/caddy/tls.caddy:ro" \
-            -e SITE_ADDRESS=localhost -e HTTP_PORT=8080 -e HTTPS_PORT=8443 \
+            -e "SITE_ADDRESSES=example.edu, localhost, 127.0.0.1" -e HTTP_PORT=8080 -e HTTPS_PORT=8443 \
             -e API_UPSTREAM=127.0.0.1:8000 -e MEDIA_ROOT=/srv/media \
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Validate Compose files
@@ -124,6 +124,6 @@ jobs:
           apptainer exec backend.sif python -c "import app.main; print('backend image ok')"
           apptainer exec backend.sif ffmpeg -version | head -1
           apptainer exec caddy.sif caddy version
-          apptainer exec --env SITE_ADDRESS=localhost --env HTTP_PORT=8080 --env HTTPS_PORT=8443 \
+          apptainer exec --env "SITE_ADDRESSES=example.edu, localhost, 127.0.0.1" --env HTTP_PORT=8080 --env HTTPS_PORT=8443 \
             --env API_UPSTREAM=127.0.0.1:8000 --env MEDIA_ROOT=/srv/media \
             caddy.sif caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

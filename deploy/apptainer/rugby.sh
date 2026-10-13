@@ -5,6 +5,7 @@
 #                                            (postgres redis backend caddy); needs network
 #   deploy/apptainer/rugby.sh start          start postgres, redis, api, workers, caddy (background processes)
 #   deploy/apptainer/rugby.sh stop | restart | status
+#   deploy/apptainer/rugby.sh check          status, listening ports and HTTP probes (run this when the site does not open)
 #   deploy/apptainer/rugby.sh logs <service> [-f]
 #   deploy/apptainer/rugby.sh create-admin   first administrator (prompts for a password)
 #   deploy/apptainer/rugby.sh seed           demo squad and match (development only)
@@ -169,11 +170,21 @@ backend_env_file() {
   echo "$f"
 }
 
+site_addresses() {
+  # Caddy serves the configured name plus localhost and 127.0.0.1, so the app also answers
+  # through an SSH tunnel (ssh -L 8443:127.0.0.1:8443) whatever SITE_ADDRESS is.
+  local list="$SITE_ADDRESS" extra
+  for extra in localhost 127.0.0.1; do
+    case ", $list, " in *", $extra, "*) ;; *) list="$list, $extra" ;; esac
+  done
+  echo "$list"
+}
+
 caddy_env_file() {
   local f="$DATA_DIR/run/caddy.env"
   mkdir -p "$DATA_DIR/run"
   {
-    env_line SITE_ADDRESS "$SITE_ADDRESS"
+    env_line SITE_ADDRESSES "$(site_addresses)"
     env_line HTTP_PORT "$HTTP_PORT"
     env_line HTTPS_PORT "$HTTPS_PORT"
     env_line API_UPSTREAM "127.0.0.1:$API_PORT"
@@ -282,7 +293,10 @@ start_backend() {
 start_caddy() {
   service_running caddy && { log "caddy already running"; return; }
   need_image caddy
-  local binds=(--bind "$DATA_DIR/media:/srv/media:ro" --bind "$DATA_DIR/caddy:/data" --bind "$DATA_DIR/caddy-config:/config")
+  # The checkout's Caddyfile is bound over the one baked into the image, so a `git pull` and a
+  # restart pick up config changes without rebuilding the image.
+  local binds=(--bind "$ROOT/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
+               --bind "$DATA_DIR/media:/srv/media:ro" --bind "$DATA_DIR/caddy:/data" --bind "$DATA_DIR/caddy-config:/config")
   if [ -f "$TLS_FILE" ]; then binds+=(--bind "$TLS_FILE:/etc/caddy/tls.caddy:ro"); fi
   if [ -n "$CERTS_DIR" ]; then binds+=(--bind "$CERTS_DIR:/certs:ro"); fi
   launch caddy --cleanenv --env-file "$(caddy_env_file)" "${binds[@]}" "$IMAGES_DIR/caddy.sif" \
@@ -301,7 +315,59 @@ cmd_start() {
   start_backend worker-cpu worker-cpu ${nv:+$nv}
   start_backend worker-gpu worker-gpu ${nv:+$nv}
   start_caddy
-  log "started. Open https://$SITE_ADDRESS:$HTTPS_PORT (GPU: ${nv:-not used}). Logs: $DATA_DIR/logs"
+  log "started. Open https://$SITE_ADDRESS:$HTTPS_PORT, or https://localhost:$HTTPS_PORT through an SSH tunnel (GPU: ${nv:-not used}). Logs: $DATA_DIR/logs"
+}
+
+probe() {   # probe <label> <url> [curl args...]: prints the response body and HTTP status
+  local label="$1" url="$2" out; shift 2
+  if command -v curl >/dev/null 2>&1; then
+    # --noproxy: everything probed here is on this machine, whatever http_proxy says.
+    out="$(curl -sSk -m 5 --noproxy '*' -w ' (HTTP %{http_code})' "$@" "$url" 2>&1)" || true
+  else
+    out="$("$APPTAINER" exec "$IMAGES_DIR/backend.sif" python -c "
+import ssl, urllib.request, urllib.error
+try:
+    r = urllib.request.urlopen('$url', timeout=5, context=ssl._create_unverified_context())
+    print(r.read().decode(errors='replace'), '(HTTP %d)' % r.status)
+except urllib.error.HTTPError as e:
+    print('(HTTP %d)' % e.code)
+except Exception as e:
+    print('error:', e)
+" 2>&1)" || true
+  fi
+  out="${out//$'\n'/ }"
+  printf '  %-16s %-48s %s\n' "$label" "$url" "$out"
+}
+
+cmd_check() {
+  cmd_status
+  echo
+  echo "Listening TCP ports (expected: $HTTPS_PORT and $HTTP_PORT for caddy, $API_PORT api, $POSTGRES_PORT postgres, $REDIS_PORT redis):"
+  local ports="($HTTPS_PORT|$HTTP_PORT|$API_PORT|$POSTGRES_PORT|$REDIS_PORT)"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | awk 'NR > 1 {print "  " $4}' | grep -E ":$ports\$" || echo "  (none of the expected ports is listening)"
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -ltn 2>/dev/null | awk '/LISTEN/ {print "  " $4}' | grep -E ":$ports\$" || echo "  (none of the expected ports is listening)"
+  else
+    echo "  (neither ss nor netstat is installed; the probes below still tell)"
+  fi
+  echo
+  echo "Probes (expect {\"status\":\"ok\",\"database\":\"ok\"} and HTTP 200 on every line):"
+  probe "api direct" "http://127.0.0.1:$API_PORT/api/health"
+  probe "caddy by ip" "https://127.0.0.1:$HTTPS_PORT/api/health"
+  probe "caddy localhost" "https://localhost:$HTTPS_PORT/api/health"
+  if [ "$SITE_ADDRESS" != "localhost" ] && command -v curl >/dev/null 2>&1; then
+    probe "caddy site name" "https://$SITE_ADDRESS:$HTTPS_PORT/api/health" --resolve "$SITE_ADDRESS:$HTTPS_PORT:127.0.0.1"
+  fi
+  probe "http redirect" "http://127.0.0.1:$HTTP_PORT/" -o /dev/null
+  echo
+  echo "From a laptop:  ssh -L $HTTPS_PORT:127.0.0.1:$HTTPS_PORT <you>@<this server>   then open https://localhost:$HTTPS_PORT"
+  echo "                (type the https:// part; accept the certificate warning once)"
+  if [ -f "$(log_file caddy)" ]; then
+    echo
+    echo "Last 15 lines of the caddy log:"
+    tail -n 15 "$(log_file caddy)" | sed 's/^/  /'
+  fi
 }
 
 cmd_stop() {
@@ -398,6 +464,7 @@ case "${1:-}" in
   stop) cmd_stop ;;
   restart) cmd_stop; cmd_start ;;
   status) cmd_status ;;
+  check) cmd_check ;;
   logs) shift; cmd_logs "$@" ;;
   create-admin) shift; cmd_create_admin "$@" ;;
   seed) shift; cmd_seed "$@" ;;
