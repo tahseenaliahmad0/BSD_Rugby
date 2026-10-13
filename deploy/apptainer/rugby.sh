@@ -9,6 +9,7 @@
 #   deploy/apptainer/rugby.sh seed           demo squad and match (development only)
 #   deploy/apptainer/rugby.sh backup <dir>   pg_dump into <dir>
 #   deploy/apptainer/rugby.sh shell <service>
+#   deploy/apptainer/rugby.sh install-service   user systemd unit so it restarts after a reboot
 #
 # Services run on the host network: Postgres, Redis and the API bind 127.0.0.1; Caddy is the only
 # public port. Settings come from deploy/apptainer/rugby.env (see rugby.env.example).
@@ -273,6 +274,36 @@ cmd_shell() {
   run "$APPTAINER" shell "instance://$PREFIX-$service"
 }
 
+cmd_install_service() {
+  # Writes a user-level systemd unit pointing at this checkout, wherever it lives.
+  local dir="$HOME/.config/systemd/user" unit
+  mkdir -p "$dir"
+  unit="$dir/rugby.service"
+  cat > "$unit" <<UNIT
+[Unit]
+Description=Rugby video analysis (Apptainer instances)
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=$HERE/rugby.sh start
+ExecStop=$HERE/rugby.sh stop
+TimeoutStartSec=600
+
+[Install]
+WantedBy=default.target
+UNIT
+  log "wrote $unit"
+  if command -v systemctl >/dev/null 2>&1; then
+    run systemctl --user daemon-reload
+    run systemctl --user enable rugby
+    log "enabled. To keep it running when you are logged out:  loginctl enable-linger $(id -un)"
+  else
+    log "systemctl not found; the unit file is written but not enabled"
+  fi
+}
+
 case "${1:-}" in
   build) cmd_build ;;
   start) cmd_start ;;
@@ -284,5 +315,6 @@ case "${1:-}" in
   seed) shift; cmd_seed "$@" ;;
   backup) shift; cmd_backup "$@" ;;
   shell) shift; cmd_shell "$@" ;;
-  *) sed -n '2,13p' "$0"; exit 1 ;;
+  install-service) cmd_install_service ;;
+  *) sed -n '2,14p' "$0"; exit 1 ;;
 esac

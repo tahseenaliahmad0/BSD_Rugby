@@ -75,7 +75,7 @@ The college server runs Apptainer, not Docker. The full procedure is in
 `deploy/apptainer/README.md`; in short:
 
 ```bash
-cd ~ && git clone <this repository> rugby-app && cd ~/rugby-app   # no root needed: everything lives in your home
+cd ~/Desktop && git clone <this repository> bsd && cd ~/Desktop/bsd   # any folder you own; no root needed
 cp deploy/apptainer/rugby.env.example deploy/apptainer/rugby.env   # edit: DATA_DIR, SITE_ADDRESS, passwords
 deploy/apptainer/rugby.sh build      # four .sif images (backend, caddy, postgres, redis)
 deploy/apptainer/rugby.sh start      # six instances on the host network
@@ -84,8 +84,8 @@ deploy/apptainer/rugby.sh create-admin
 
 Open `https://<SITE_ADDRESS>:8443` (a rootless process cannot use 443; IT can change that).
 Upgrades are `git pull`, `rugby.sh build`, `rugby.sh restart`; migrations run when the API
-starts. `rugby.sh backup <dir>` dumps the database; a user systemd unit restarts everything
-after a reboot. The GPU is used automatically when `nvidia-smi` is present. See ADR 0009.
+starts. `rugby.sh backup <dir>` dumps the database; `rugby.sh install-service` adds a user
+systemd unit that restarts everything after a reboot. The GPU is used automatically when `nvidia-smi` is present. See ADR 0009.
 
 ### Docker alternative
 

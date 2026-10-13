@@ -1,8 +1,5 @@
-# User-level systemd unit so the app comes back after a reboot without root.
-#   mkdir -p ~/.config/systemd/user
-#   cp deploy/apptainer/rugby.service ~/.config/systemd/user/   (%h is your home directory;
-#   edit ExecStart/ExecStop if the clone is not at ~/rugby-app)
-#   systemctl --user daemon-reload && systemctl --user enable --now rugby
+# Reference copy of the user-level systemd unit. Prefer `deploy/apptainer/rugby.sh
+# install-service`, which writes this file with the real path of your checkout, then
 #   loginctl enable-linger $USER      # keeps user services running when nobody is logged in
 [Unit]
 Description=Rugby video analysis (Apptainer instances)
@@ -11,8 +8,8 @@ After=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=%h/rugby-app/deploy/apptainer/rugby.sh start
-ExecStop=%h/rugby-app/deploy/apptainer/rugby.sh stop
+ExecStart=%h/Desktop/bsd/deploy/apptainer/rugby.sh start
+ExecStop=%h/Desktop/bsd/deploy/apptainer/rugby.sh stop
 TimeoutStartSec=600
 
 [Install]

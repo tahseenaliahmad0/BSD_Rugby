@@ -16,12 +16,13 @@ background instances, one data directory. Decisions in `docs/decisions/0009-appt
 
 ## First install
 
-You are not root, so everything goes under your home directory (or any folder you own):
+You are not root, so everything goes under your home directory (or any folder you own). The
+examples use `~/Desktop/bsd`; any path works, the launcher finds its own location:
 
 ```bash
-cd ~
-git clone <this repository> rugby-app
-cd ~/rugby-app
+cd ~/Desktop
+git clone <this repository> bsd
+cd ~/Desktop/bsd
 cp deploy/apptainer/rugby.env.example deploy/apptainer/rugby.env
 nano deploy/apptainer/rugby.env                 # DATA_DIR, SITE_ADDRESS, passwords, admin
 deploy/apptainer/rugby.sh build                 # 10 to 20 minutes the first time
@@ -39,7 +40,7 @@ either install the college certificate (copy `tls.caddy.example` to `tls.caddy`,
 ## Upgrades
 
 ```bash
-cd ~/rugby-app && git pull
+cd ~/Desktop/bsd && git pull
 deploy/apptainer/rugby.sh build && deploy/apptainer/rugby.sh restart
 ```
 
@@ -47,14 +48,11 @@ Database migrations run when the api instance starts.
 
 ## After a reboot
 
-Install the user service once:
+Install the user service once; it is written with the path of your checkout:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cp deploy/apptainer/rugby.service ~/.config/systemd/user/rugby.service
-# The unit assumes ~/rugby-app; edit ExecStart/ExecStop in the copied file if you cloned elsewhere.
-systemctl --user daemon-reload && systemctl --user enable --now rugby
-loginctl enable-linger "$USER"
+deploy/apptainer/rugby.sh install-service
+loginctl enable-linger "$USER"     # keep it running when nobody is logged in
 ```
 
 ## Backups
