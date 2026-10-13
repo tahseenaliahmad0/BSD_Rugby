@@ -285,13 +285,19 @@ def test_media_access_control(
         assert (
             client.get("/api/media/authorize", headers={"X-Forwarded-Uri": uri}).status_code == 204
         )
-    # The in-progress uploads folder and anything outside the layout are never served.
+    # Caddy may strip the /media prefix before asking; both forms are accepted.
     assert (
         client.get(
-            "/api/media/authorize", headers={"X-Forwarded-Uri": "/media/uploads/x.part"}
+            "/api/media/authorize", headers={"X-Forwarded-Uri": f"/proxies/{video_id}/proxy.mp4"}
         ).status_code
-        == 404
+        == 204
     )
+    # The in-progress uploads folder and anything outside the layout are never served.
+    for uri in ("/media/uploads/x.part", "/uploads/x.part", "proxies/x", ""):
+        assert (
+            client.get("/api/media/authorize", headers={"X-Forwarded-Uri": uri}).status_code
+            in (400, 404)
+        ), uri
     assert (
         client.get(
             "/api/media/authorize",

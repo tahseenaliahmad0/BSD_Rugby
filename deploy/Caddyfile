@@ -48,14 +48,20 @@ http:// {
 
 	# Video, posters and thumbnails: ask the API whether this user may see this file, then let
 	# Caddy serve it from the storage volume with HTTP range requests.
+	#
+	# `route` keeps these in the written order. Without it Caddy sorts directives by its own
+	# table, which puts `uri strip_prefix` before `forward_auth`, and the API would then be
+	# asked about /proxies/... instead of /media/proxies/... and refuse every file.
 	handle /media/* {
-		forward_auth {$API_UPSTREAM:api:8000} {
-			uri /api/media/authorize
+		route {
+			forward_auth {$API_UPSTREAM:api:8000} {
+				uri /api/media/authorize
+			}
+			uri strip_prefix /media
+			root * {$MEDIA_ROOT:/srv/media}
+			header Cache-Control "private, max-age=3600"
+			file_server
 		}
-		uri strip_prefix /media
-		root * {$MEDIA_ROOT:/srv/media}
-		header Cache-Control "private, max-age=3600"
-		file_server
 	}
 
 	# The React app. Unknown paths fall back to index.html for client-side routing.

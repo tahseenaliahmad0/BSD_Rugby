@@ -63,10 +63,17 @@ def _authorize(db: Session, user: User | None, rel: str) -> None:
 
 
 def _rel_from_media_path(path: str) -> str:
+    """`/media/proxies/...` -> `proxies/...`.
+
+    The prefix is optional: a reverse proxy that strips `/media` before asking us (Caddy
+    does, unless its directives are ordered explicitly) sends `/proxies/...`.
+    """
     path = unquote(path)
-    if not path.startswith(MEDIA_PREFIX):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
-    return path[len(MEDIA_PREFIX) :]
+    if path.startswith(MEDIA_PREFIX):
+        return path[len(MEDIA_PREFIX) :]
+    if path.startswith("/"):
+        return path[1:]
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
 
 
 @router.get("/api/media/authorize", include_in_schema=False)
