@@ -294,9 +294,9 @@ def test_media_access_control(
     )
     # The in-progress uploads folder and anything outside the layout are never served.
     for uri in ("/media/uploads/x.part", "/uploads/x.part", "proxies/x", ""):
-        assert (
-            client.get("/api/media/authorize", headers={"X-Forwarded-Uri": uri}).status_code
-            in (400, 404)
+        assert client.get("/api/media/authorize", headers={"X-Forwarded-Uri": uri}).status_code in (
+            400,
+            404,
         ), uri
     assert (
         client.get(

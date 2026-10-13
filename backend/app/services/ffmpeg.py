@@ -262,10 +262,12 @@ def make_thumbnails(
 ) -> int:
     """One JPEG every `thumbnail_interval_s` seconds plus a WebVTT index. Returns the count.
 
-    The proxy has a keyframe every second, so the decoder is told to skip everything but
-    keyframes (`-skip_frame nokey`): a 90-minute match then means decoding ~5,400 frames
-    instead of ~160,000, which turns minutes into seconds. Each thumbnail is the keyframe
-    nearest its slot, at most half a second from the exact time.
+    The proxy has a keyframe every whole second, so the decoder is told to skip everything
+    but keyframes (`-skip_frame nokey`): a 90-minute match then means decoding ~5,400 frames
+    instead of ~160,000, which turns minutes into seconds. `select` keeps the keyframe on
+    each multiple of the interval (within half a second, to absorb timestamp rounding), so
+    thumbnail N shows the frame at (N-1) * interval exactly as the VTT index promises. The
+    `fps` filter is avoided on purpose: fed only keyframes it drops the last slot.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     interval = max(1, settings.thumbnail_interval_s)
@@ -281,7 +283,9 @@ def make_thumbnails(
         "-i",
         str(proxy),
         "-vf",
-        f"fps=1/{interval},scale={settings.thumbnail_width}:-2",
+        f"select='lt(mod(t+0.5,{interval}),1)',scale={settings.thumbnail_width}:-2",
+        "-fps_mode",
+        "vfr",
         "-q:v",
         "5",
         "-progress",
