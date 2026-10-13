@@ -208,3 +208,62 @@ test('a coach sees the simple screens and cannot tag', async ({ page }) => {
   await page.getByTestId('nav-playlists').click();
   await expect(page.getByTestId('new-playlist')).toBeVisible();
 });
+
+test('stays smooth with 1,500 tags on one match', async ({ page }) => {
+  await login(page);
+  const squads = await (await page.request.get('/api/squads')).json();
+  const events = await (await page.request.get(`/api/squads/${squads[0].id}/events`)).json();
+  const eventId = events[0].id as string;
+  const csrf = (await page.context().cookies()).find((c) => c.name === 'rugby_csrf')!.value;
+  const existing = (await (await page.request.get(`/api/events/${eventId}/tags`)).json()).length as number;
+  if (existing < 1500) {
+    const codes = ['Ruck', 'Carry', 'Tackle', 'Scrum', 'Lineout', 'Kick', 'Possession'];
+    const create = Array.from({ length: 1500 }, (_, i) => ({
+      code: codes[i % codes.length],
+      start_ms: i * 40,
+      end_ms: i * 40 + 3000,
+      descriptors: { outcome: i % 3 ? 'Won' : 'Lost', zone: 'Opp 22' },
+    }));
+    const response = await page.request.post(`/api/events/${eventId}/tags/batch`, { headers: { 'X-CSRF-Token': csrf }, data: { create } });
+    expect(response.ok()).toBeTruthy();
+  }
+
+  const opened = Date.now();
+  await page.goto(`/matches/${eventId}/tag`);
+  await expect(page.getByText(/1[5-9]\d\d tags/)).toBeVisible({ timeout: 20_000 });
+  const loadMs = Date.now() - opened;
+  expect(loadMs).toBeLessThan(10_000);
+
+  const timeline = page.getByTestId('timeline');
+  await timeline.scrollIntoViewIfNeeded();
+  const box = (await timeline.locator('canvas').boundingBox())!;
+
+  // Zoom in several steps and scroll along the match; each step must repaint quickly.
+  const started = Date.now();
+  for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  for (let i = 0; i < 20; i++) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(120, 0);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  }
+  const interactionMs = Date.now() - started;
+  expect(interactionMs).toBeLessThan(6_000);
+
+  // The playhead readout and a tag drag still work at this scale.
+  await page.getByRole('button', { name: 'Fit whole match' }).click();
+  const pxPerMs = (box.width - 128) / 63_000; // 1,500 tags end at 63 s
+  const y = box.y + 26 + 4 * 30 + 15; // Ruck row
+  const before = (await (await page.request.get(`/api/events/${eventId}/tags`)).json()) as Array<{ id: string; code: string; start_ms: number }>;
+  const target = before.filter((t) => t.code === 'Ruck').sort((a, b) => b.start_ms - a.start_ms)[0];
+  const x = box.x + 128 + (target.start_ms + 1500) * pxPerMs;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 40, y, { steps: 4 });
+  await page.mouse.move(x + 80, y, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const after = (await (await page.request.get(`/api/events/${eventId}/tags`)).json()) as Array<{ id: string; start_ms: number }>;
+    return after.find((t) => t.id === target.id)!.start_ms;
+  }).toBeGreaterThan(target.start_ms + 1000);
+  console.log(`1,500 tags: loaded in ${loadMs} ms, 26 zoom/scroll steps in ${interactionMs} ms`);
+});
