@@ -9,7 +9,7 @@ NPM ?= npm
 
 .PHONY: help setup setup-backend setup-frontend check check-backend check-frontend \
         test test-backend test-frontend e2e dev-api dev-worker dev-frontend seed migrate \
-        clean
+        clean apptainer-build apptainer-start apptainer-stop apptainer-status
 
 help:
 	@echo "make setup          install backend (.venv) and frontend (node_modules) dependencies"
@@ -21,6 +21,7 @@ help:
 	@echo "make dev-api        run the API with reload on :8000"
 	@echo "make dev-worker     run the cpu Celery worker"
 	@echo "make dev-frontend   run the Vite dev server on :5173"
+	@echo "make apptainer-build / apptainer-start / apptainer-stop   run with Apptainer (no Docker)"
 
 setup: setup-backend setup-frontend
 
@@ -70,3 +71,16 @@ dev-frontend:
 clean:
 	rm -rf $(BACKEND)/.venv $(BACKEND)/.mypy_cache $(BACKEND)/.ruff_cache $(BACKEND)/.pytest_cache
 	rm -rf $(FRONTEND)/node_modules $(FRONTEND)/dist
+
+# Apptainer (the college server has no Docker). See deploy/apptainer/README.md.
+apptainer-build:
+	deploy/apptainer/rugby.sh build
+
+apptainer-start:
+	deploy/apptainer/rugby.sh start
+
+apptainer-stop:
+	deploy/apptainer/rugby.sh stop
+
+apptainer-status:
+	deploy/apptainer/rugby.sh status

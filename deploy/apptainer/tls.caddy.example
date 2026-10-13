@@ -1,0 +1,3 @@
+# Copy to deploy/apptainer/tls.caddy to use a certificate that college laptops trust.
+# The files come from CERTS_DIR in rugby.env, bound read-only at /certs.
+tls /certs/fullchain.pem /certs/privkey.pem

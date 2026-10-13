@@ -1,0 +1,10 @@
+# Redis 7.2 (the last BSD-licensed release) for Apptainer, as an instance. Persistence is off:
+# the queue only holds jobs in flight.
+Bootstrap: docker
+From: redis:7.2-alpine
+
+%startscript
+    exec redis-server --save "" --appendonly no "$@"
+
+%runscript
+    exec redis-server "$@"

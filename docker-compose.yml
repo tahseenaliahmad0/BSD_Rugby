@@ -1,4 +1,5 @@
-# Development stack. Runs on a Mac or Windows laptop with no GPU:
+# Development stack for Docker (Compose). The college server runs Apptainer instead: see
+# deploy/apptainer/README.md. Runs on a Mac or Windows laptop with no GPU:
 #   docker compose up --build
 # then open https://localhost (accept the local certificate) and sign in with the seed admin.
 # Production adds deploy/docker-compose.prod.yml on top; see README.md.
@@ -51,7 +52,7 @@ services:
 
   api:
     <<: *backend
-    command: ["docker/start-api.sh"]
+    command: ["bin/start.sh", "api"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
       interval: 10s
@@ -60,12 +61,12 @@ services:
 
   worker-cpu:
     <<: *backend
-    command: ["docker/start-worker.sh", "cpu", "1"]
+    command: ["bin/start.sh", "worker-cpu"]
 
   worker-gpu:
     # Stub until the AI milestones: consumes the gpu queue, runs without a GPU in development.
     <<: *backend
-    command: ["docker/start-worker.sh", "gpu", "1"]
+    command: ["bin/start.sh", "worker-gpu"]
     environment:
       <<: *backend-env
       GPU_ENABLED: "false"
@@ -80,8 +81,8 @@ services:
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
     volumes:
-      - media:/data:ro
-      - caddy_data:/data_caddy
+      - media:/srv/media:ro
+      - caddy_data:/data
       - caddy_config:/config
     depends_on:
       api:

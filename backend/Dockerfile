@@ -19,8 +19,8 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-dev
 
 COPY . .
-RUN chmod +x docker/*.sh
+RUN chmod +x bin/*.sh
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
-CMD ["docker/start-api.sh"]
+CMD ["bin/start.sh", "api"]

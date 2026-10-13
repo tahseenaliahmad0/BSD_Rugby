@@ -5,5 +5,8 @@
 set -euo pipefail
 FILE="${1:?dump file}"
 cd "$(dirname "$0")/../.."
+if command -v apptainer >/dev/null 2>&1 && apptainer instance list 2>/dev/null | grep -q rugby-postgres; then
+  exec apptainer exec instance://rugby-postgres pg_restore -h 127.0.0.1 -U "${POSTGRES_USER:-rugby}" -d "${POSTGRES_DB:-rugby}" --clean --if-exists --no-owner < "$FILE"
+fi
 docker compose exec -T postgres pg_restore -U "${POSTGRES_USER:-rugby}" -d "${POSTGRES_DB:-rugby}" --clean --if-exists --no-owner < "$FILE"
 echo "restored $FILE; start the app again with: docker compose up -d"

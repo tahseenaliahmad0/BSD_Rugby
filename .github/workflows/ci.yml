@@ -89,10 +89,41 @@ jobs:
           docker run --rm \
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             -v "$PWD/deploy/caddy/tls.dev.caddy:/etc/caddy/tls.caddy:ro" \
-            -e SITE_ADDRESS=localhost \
+            -e SITE_ADDRESS=localhost -e HTTP_PORT=8080 -e HTTPS_PORT=8443 \
+            -e API_UPSTREAM=127.0.0.1:8000 -e MEDIA_ROOT=/srv/media \
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Validate Compose files
         run: |
           docker compose -f docker-compose.yml config -q
           SITE_ADDRESS=example.edu DATA_DIR=/tmp/rugby CERTS_DIR=/tmp/certs \
             docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml config -q
+
+  apptainer-build:
+    # The college server runs Apptainer, not Docker: build the same images from the def files.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: 1.3.6
+      - name: Build the four images
+        run: |
+          mkdir -p deploy/apptainer/build
+          git archive HEAD backend frontend | tar -x -C deploy/apptainer/build
+          rm -rf deploy/apptainer/build/backend/tests
+          cd deploy/apptainer
+          sudo apptainer build --force postgres.sif postgres.def
+          sudo apptainer build --force redis.sif redis.def
+          sudo apptainer build --force backend.sif backend.def
+          sudo apptainer build --force caddy.sif caddy.def
+          ls -la *.sif
+      - name: Smoke test the backend image
+        run: |
+          cd deploy/apptainer
+          apptainer exec backend.sif python -c "import app.main; print('backend image ok')"
+          apptainer exec backend.sif ffmpeg -version | head -1
+          apptainer exec caddy.sif caddy version
+          apptainer exec --env SITE_ADDRESS=localhost --env HTTP_PORT=8080 --env HTTPS_PORT=8443 \
+            --env API_UPSTREAM=127.0.0.1:8000 --env MEDIA_ROOT=/srv/media \
+            caddy.sif caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

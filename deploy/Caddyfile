@@ -1,9 +1,15 @@
 # Single entry point: HTTPS, the built frontend, the API, and video files with range requests.
+# The same file serves Docker Compose and Apptainer; the differences are environment variables:
 #
 # SITE_ADDRESS   the hostname Caddy serves (default localhost)
+# HTTP_PORT, HTTPS_PORT   80 and 443 by default; rootless Apptainer uses 8080 and 8443
+# API_UPSTREAM   api:8000 on the Compose network; 127.0.0.1:8000 on the Apptainer host network
+# MEDIA_ROOT     where the storage volume is mounted read-only (default /srv/media)
 # /etc/caddy/tls.caddy   `tls internal` for development, or `tls <cert> <key>` in production
 {
 	admin off
+	http_port {$HTTP_PORT:80}
+	https_port {$HTTPS_PORT:443}
 }
 
 {$SITE_ADDRESS:localhost} {
@@ -18,7 +24,7 @@
 
 	# API (and tus uploads). Bodies stream straight through; no size limit for match files.
 	handle /api/* {
-		reverse_proxy api:8000 {
+		reverse_proxy {$API_UPSTREAM:api:8000} {
 			flush_interval -1
 			transport http {
 				read_timeout 0
@@ -30,11 +36,11 @@
 	# Video, posters and thumbnails: ask the API whether this user may see this file, then let
 	# Caddy serve it from the storage volume with HTTP range requests.
 	handle /media/* {
-		forward_auth api:8000 {
+		forward_auth {$API_UPSTREAM:api:8000} {
 			uri /api/media/authorize
 		}
 		uri strip_prefix /media
-		root * /data
+		root * {$MEDIA_ROOT:/srv/media}
 		header Cache-Control "private, max-age=3600"
 		file_server
 	}

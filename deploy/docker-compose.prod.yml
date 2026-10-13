@@ -1,4 +1,5 @@
-# Production overlay for the college server:
+# Production overlay for a server that runs Docker (the college server uses Apptainer; see
+# deploy/apptainer/README.md):
 #   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
 # Copy deploy/.env.production.example to .env in the repository root and fill it in first.
 
@@ -55,8 +56,8 @@ services:
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
     volumes:
-      - ${DATA_DIR}/media:/data:ro
+      - ${DATA_DIR}/media:/srv/media:ro
       - ${CERTS_DIR:?set CERTS_DIR in .env}:/certs:ro
       - ./deploy/caddy/tls.prod.caddy:/etc/caddy/tls.caddy:ro
-      - caddy_data:/data_caddy
+      - caddy_data:/data
       - caddy_config:/config

@@ -1,0 +1,11 @@
+# PostgreSQL 16 for Apptainer: the official image plus a start script, so it runs as an instance.
+# Runs as the invoking user (rootless); bind a user-owned, initially empty directory at
+# /var/lib/postgresql/data and a writable one at /var/run/postgresql for the socket.
+Bootstrap: docker
+From: postgres:16
+
+%startscript
+    exec docker-entrypoint.sh postgres "$@"
+
+%runscript
+    exec docker-entrypoint.sh "$@"

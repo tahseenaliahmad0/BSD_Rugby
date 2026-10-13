@@ -1,0 +1,36 @@
+# Caddy with the built frontend, for Apptainer. Two stages: build the frontend with Node, then
+# copy only the built files into the Caddy image. Mirrors deploy/caddy/Dockerfile.
+Bootstrap: docker
+From: node:22-alpine
+Stage: build
+
+%files
+    build/frontend /src
+
+%post
+    set -e
+    cd /src
+    npm ci --no-audit --no-fund
+    npx vite build
+
+Bootstrap: docker
+From: caddy:2-alpine
+Stage: final
+
+%files from build
+    /src/dist /srv
+
+%files
+    ../Caddyfile /etc/caddy/Caddyfile
+    ../caddy/tls.dev.caddy /etc/caddy/tls.caddy
+
+%startscript
+    exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+
+%runscript
+    exec caddy "$@"
+
+%help
+    Set SITE_ADDRESS, HTTP_PORT, HTTPS_PORT, API_UPSTREAM and MEDIA_ROOT. Bind the storage
+    volume read-only at /srv/media, a writable directory at /data (certificates) and another at
+    /config. Bind a TLS snippet over /etc/caddy/tls.caddy for production certificates.

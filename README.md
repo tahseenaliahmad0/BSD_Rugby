@@ -1,8 +1,9 @@
 # BSD Rugby video analysis
 
 Self-hosted video analysis for the rugby programme: upload match footage, watch it frame by
-frame, and (in later milestones) tag it, build playlists and let AI propose tags. Runs on the
-college GPU server with Docker Compose and is used through a browser on the campus network.
+frame, tag it, find clips, build playlists and (in later milestones) let AI propose tags. Runs
+on the college GPU server with Apptainer (Docker Compose for laptops and CI) and is used
+through a browser on the campus network.
 
 Milestones 0 to 2 are done: sign in, pick a squad, create a match, upload a full-length
 video (resumable), have it transcoded, watch it frame by frame, tag it with the keyboard, fix
@@ -18,10 +19,10 @@ coach guides.
 | `frontend/` | React + TypeScript app (Vite, Mantine, TanStack Query), Vitest unit tests, Playwright smoke test |
 | `backend/` | FastAPI API, SQLAlchemy models, Alembic migrations, Celery workers, seed scripts, pytest |
 | `ml/` | Placeholder for the AI milestones |
-| `deploy/` | Caddyfile, production Compose overlay, backup scripts |
+| `deploy/` | Caddyfile, Apptainer definition files and launcher, Compose overlay, backup scripts |
 | `docs/` | Plan, decision records, licence list |
 
-## Run it with Docker (any laptop, no GPU needed)
+## Run it with Docker on a laptop (no GPU needed)
 
 Requirements: Docker Desktop (Mac or Windows) or Docker Engine with the Compose plugin.
 
@@ -68,38 +69,35 @@ in `frontend/`) and run with `PLAYWRIGHT_CHANNEL=chrome` to exercise playback an
 stepping; with plain Chromium those two checks are skipped and reported as such.
 `PLAYWRIGHT_CHROMIUM_PATH` points Playwright at an existing Chromium binary if needed.
 
-## Production deployment (college server)
+## Production deployment (college server, Apptainer)
 
-1. Confirm the IT checklist in the design spec: Docker with the NVIDIA Container Toolkit, a
-   campus hostname, a TLS certificate that college laptops trust, storage volume and backups.
-2. Clone the repository to the server (for example `/srv/rugby/app`) and create the data
-   folders: `/srv/rugby/postgres`, `/srv/rugby/media`, `/srv/rugby/certs` (put `fullchain.pem`
-   and `privkey.pem` there).
-3. `cp deploy/.env.production.example .env` and fill in the hostname, folders and passwords.
-4. Start everything:
+The college server runs Apptainer, not Docker. The full procedure is in
+`deploy/apptainer/README.md`; in short:
 
-   ```bash
-   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
-   ```
+```bash
+git clone <this repository> /srv/rugby/app && cd /srv/rugby/app
+cp deploy/apptainer/rugby.env.example deploy/apptainer/rugby.env   # edit: DATA_DIR, SITE_ADDRESS, passwords
+deploy/apptainer/rugby.sh build      # four .sif images (backend, caddy, postgres, redis)
+deploy/apptainer/rugby.sh start      # six instances on the host network
+deploy/apptainer/rugby.sh create-admin
+```
 
-   Migrations run automatically when the `api` container starts.
-5. Create the first admin (the seed script is for development only):
+Open `https://<SITE_ADDRESS>:8443` (a rootless process cannot use 443; IT can change that).
+Upgrades are `git pull`, `rugby.sh build`, `rugby.sh restart`; migrations run when the API
+starts. `rugby.sh backup <dir>` dumps the database; a user systemd unit restarts everything
+after a reboot. The GPU is used automatically when `nvidia-smi` is present. See ADR 0009.
 
-   ```bash
-   docker compose exec api python -m app.scripts.create_admin --email you@college.edu --name "Your Name"
-   ```
+### Docker alternative
 
-   It prompts for a password (or reads `ADMIN_PASSWORD`). This account is a site
-   administrator: it can create squads with `POST /api/squads` (see `/api/docs`) and add
-   coaches and analysts to them with `POST /api/squads/{id}/members`. A squad admin UI arrives
-   with Milestone 2.
-6. Upgrades: `git pull`, then the same `up -d --build` command.
-7. Backups: `deploy/backup/pg_dump.sh /srv/backups/rugby` from cron nightly; restore with
-   `deploy/backup/pg_restore.sh`. Back up `/srv/rugby/media/originals` under IT's storage
-   policy; proxies and thumbnails can be regenerated.
+On a server with Docker and the NVIDIA Container Toolkit the Compose files work as before:
+copy `deploy/.env.production.example` to `.env`, put the certificate in `CERTS_DIR`, then
 
-Transcodes use NVENC automatically when FFmpeg in the worker can reach the GPU
-(`TRANSCODE_ENCODER=auto`); set `TRANSCODE_ENCODER=libx264` to force software encoding.
+```bash
+docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+docker compose exec api python -m app.scripts.create_admin --email you@college.edu --name "Your Name"
+```
+
+Backups: `deploy/backup/pg_dump.sh` and `pg_restore.sh`.
 
 ## How the pieces fit
 

@@ -42,6 +42,7 @@ this list when adding a package. Checked 2026-10-13.
 | PostgreSQL | PostgreSQL licence (permissive) | |
 | Redis 7.2 | BSD-3 | Later Redis versions changed licence; Valkey (BSD-3) is a drop-in alternative |
 | Caddy | Apache-2.0 | |
+| Apptainer | BSD-3 | Container runtime on the college server |
 | FFmpeg (Debian build) | LGPL-2.1+ with GPL components such as libx264 | Called as a subprocess only; never linked into the application |
 | Python 3.12 | PSF | |
 | Node 22 | MIT | |

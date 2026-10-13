@@ -43,6 +43,15 @@ Date: 2026-10-13. Branch `claude/keen-hawking-km90vd`. Companion to `plan-m2.md`
 | Guides | `docs/guides/tagging-a-match.md` and `finding-clips.md`, screenshots captured with Playwright at laptop (1280) and tablet (1024 landscape, 820 portrait) widths |
 | Clean checkout | fresh clone: `make setup`, `make check` clean, `make test` (45 + 54), `make e2e` (4 passed, screenshot capture skipped without `SCREENSHOTS=1`) |
 
+## Deployment change
+
+The college server allows Apptainer only. `deploy/apptainer/` now holds definition files for
+the four images, a launcher that runs the services as instances, an env template and a user
+systemd unit; `deploy/apptainer/README.md` has the install steps and a first-start checklist.
+Apptainer is not available in the build sandbox, so the launcher was verified in dry-run mode
+and the def files mirror the Dockerfiles that CI builds; the first real start happens on the
+server (ADR 0009).
+
 ## Known limits
 
 - Playwright's bundled Chromium cannot decode H.264, so in that browser the scenario drives

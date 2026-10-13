@@ -1,0 +1,39 @@
+# API and worker image for Apptainer. Build with:  deploy/apptainer/rugby.sh build
+# (the launcher exports the backend sources to deploy/apptainer/build/backend first, so the
+#  copy excludes .venv, data and tests). Mirrors backend/Dockerfile.
+Bootstrap: docker
+From: python:3.12-slim-bookworm
+
+%files
+    build/backend /app
+
+%post
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends ffmpeg ca-certificates fonts-dejavu-core
+    rm -rf /var/lib/apt/lists/*
+    pip install --no-cache-dir "uv>=0.9,<1"
+    cd /app
+    UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 uv sync --frozen --no-dev
+    chmod +x /app/bin/*.sh
+    mkdir -p /data
+
+%environment
+    export PATH=/app/.venv/bin:$PATH
+    export PYTHONUNBUFFERED=1
+    export PYTHONDONTWRITEBYTECODE=1
+
+%startscript
+    # apptainer instance start backend.sif rugby-api api   (or worker-cpu / worker-gpu)
+    exec /app/bin/start.sh "$@"
+
+%runscript
+    exec /app/bin/start.sh "$@"
+
+%labels
+    org.opencontainers.image.title "Rugby video analysis backend"
+
+%help
+    Roles: api, worker-cpu, worker-gpu. Bind the storage volume at /data and set DATABASE_URL,
+    REDIS_URL and STORAGE_ROOT=/data. See deploy/apptainer/README.md.
