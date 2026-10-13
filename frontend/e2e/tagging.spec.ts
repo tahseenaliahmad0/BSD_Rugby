@@ -251,19 +251,24 @@ test('stays smooth with 1,500 tags on one match', async ({ page }) => {
 
   // The playhead readout and a tag drag still work at this scale.
   await page.getByRole('button', { name: 'Fit whole match' }).click();
-  const pxPerMs = (box.width - 128) / 63_000; // 1,500 tags end at 63 s
+  const pxPerMs = (box.width - 128) / 60_000; // "Fit" shows at least 60 s
   const y = box.y + 26 + 4 * 30 + 15; // Ruck row
   const before = (await (await page.request.get(`/api/events/${eventId}/tags`)).json()) as Array<{ id: string; code: string; start_ms: number }>;
-  const target = before.filter((t) => t.code === 'Ruck').sort((a, b) => b.start_ms - a.start_ms)[0];
+  // A ruck near the middle of the match.
+  const target = before.filter((t) => t.code === 'Ruck' && t.start_ms > 30_000).sort((a, b) => a.start_ms - b.start_ms)[0];
   const x = box.x + 128 + (target.start_ms + 1500) * pxPerMs;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  await page.mouse.move(x + 40, y, { steps: 4 });
-  await page.mouse.move(x + 80, y, { steps: 4 });
+  await page.mouse.move(x + 1000 * pxPerMs, y, { steps: 4 });
+  await page.mouse.move(x + 2000 * pxPerMs, y, { steps: 4 });
   await page.mouse.up();
+  // Tags overlap at this density, so the drag may pick any ruck under the pointer: check
+  // that one tag moved by about the dragged distance (2 s) and nothing else changed.
+  const startsBefore = new Map(before.map((t) => [t.id, t.start_ms]));
   await expect.poll(async () => {
     const after = (await (await page.request.get(`/api/events/${eventId}/tags`)).json()) as Array<{ id: string; start_ms: number }>;
-    return after.find((t) => t.id === target.id)!.start_ms;
-  }).toBeGreaterThan(target.start_ms + 1000);
+    const moved = after.filter((t) => Math.abs(t.start_ms - (startsBefore.get(t.id) ?? t.start_ms)) > 1000);
+    return moved.length === 1 && Math.abs(moved[0].start_ms - startsBefore.get(moved[0].id)! - 2000) < 300;
+  }).toBe(true);
   console.log(`1,500 tags: loaded in ${loadMs} ms, 26 zoom/scroll steps in ${interactionMs} ms`);
 });

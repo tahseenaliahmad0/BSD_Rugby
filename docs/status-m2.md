@@ -39,8 +39,9 @@ Date: 2026-10-13. Branch `claude/keen-hawking-km90vd`. Companion to `plan-m2.md`
 | `make check` | clean (ruff, mypy strict, eslint, tsc) |
 | Backend tests | 45 pytest: templates (validation, versioning, permissions), tags (concurrency conflict, split, merge, batch, 1,500 tags listed in well under 2 s), clip search (AND/OR, descriptors, players, scope, saved filters), playlists (filter, refresh, order, notes, sharing), stats (rates, players, CSV), exports (clip, playlist, range, access, delete), plus Milestone 1 |
 | Frontend unit tests | 54 vitest: frame maths, time conversions (offset, 29.97 fps round trips), lead/lag and start/stop logic, descriptor toggling, hotkeys, tag store commands with undo/redo and conflict handling, 1,500 tags in the store |
-| Playwright | Milestone 1 smoke test; Milestone 2 scenario: hotkeys (start/stop, instant with lead/lag), Shift+letter descriptor, chip, player picker, timeline drag with frame snapping, undo/redo, split, marquee select and merge, note, Find clips chips and saved search, playlist from a search, play through with next/previous, rename, export to MP4 (file downloaded and checked), stats number opening a playlist; a coach sees only the simple screens |
+| Playwright | Milestone 1 smoke test; Milestone 2 scenario: hotkeys (start/stop, instant with lead/lag), Shift+letter descriptor, chip, player picker, timeline drag with frame snapping, undo/redo, split, marquee select and merge, note, Find clips chips and saved search, playlist from a search, play through with next/previous, rename, export to MP4 (file downloaded and checked), stats number opening a playlist; a coach sees only the simple screens; a 1,500-tag match opens in the workspace in under 2 s and 26 zoom and scroll steps take 2.6 s with a drag still landing on the right frame |
 | Guides | `docs/guides/tagging-a-match.md` and `finding-clips.md`, screenshots captured with Playwright at laptop (1280) and tablet (1024 landscape, 820 portrait) widths |
+| Clean checkout | fresh clone: `make setup`, `make check` clean, `make test` (45 + 54), `make e2e` (4 passed, screenshot capture skipped without `SCREENSHOTS=1`) |
 
 ## Known limits
 
