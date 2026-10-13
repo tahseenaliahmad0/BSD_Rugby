@@ -58,12 +58,14 @@ jobs:
       - name: Backend and frontend unit tests
         run: make test
 
-      - name: Install Playwright browser
+      - name: Install Google Chrome for Playwright (Playwright's Chromium cannot decode H.264)
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chrome
 
       - name: Playwright smoke test
         run: make e2e
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
 
       - name: Upload Playwright report
         if: failure()
@@ -82,6 +84,13 @@ jobs:
         run: docker build backend
       - name: Build Caddy + frontend image
         run: docker build -f deploy/caddy/Dockerfile .
+      - name: Validate Caddyfile
+        run: |
+          docker run --rm \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "$PWD/deploy/caddy/tls.dev.caddy:/etc/caddy/tls.caddy:ro" \
+            -e SITE_ADDRESS=localhost \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Validate Compose files
         run: |
           docker compose -f docker-compose.yml config -q

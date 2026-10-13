@@ -4,3 +4,6 @@ test-results
 playwright-report
 blob-report
 .vite
+
+# TypeScript build info
+*.tsbuildinfo

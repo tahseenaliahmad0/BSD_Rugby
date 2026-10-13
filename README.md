@@ -59,9 +59,11 @@ make test                  # pytest (API: auth, permissions, upload to transcode
 make e2e                   # Playwright: login -> create match -> upload -> play
 ```
 
-`make e2e` starts its own API on the `rugby_e2e` database and the Vite dev server. If
-Playwright's bundled Chromium is not installed, run `npx playwright install chromium` in
-`frontend/` or point `PLAYWRIGHT_CHROMIUM_PATH` at a Chromium binary.
+`make e2e` starts its own API on the `rugby_e2e` database and the Vite dev server. Playwright's
+own Chromium cannot decode H.264, so install Google Chrome for it (`npx playwright install chrome`
+in `frontend/`) and run with `PLAYWRIGHT_CHANNEL=chrome` to exercise playback and frame
+stepping; with plain Chromium those two checks are skipped and reported as such.
+`PLAYWRIGHT_CHROMIUM_PATH` points Playwright at an existing Chromium binary if needed.
 
 ## Production deployment (college server)
 
