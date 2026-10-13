@@ -1,7 +1,7 @@
 # Running on the college server with Apptainer
 
 The server has Apptainer, no Docker. Everything runs as your own user: four images, six
-background instances, one data directory. Decisions in `docs/decisions/0009-apptainer-deployment.md`.
+background processes, one data directory. Decisions in `docs/decisions/0009-apptainer-deployment.md`.
 
 ## What you need on the server
 
@@ -36,8 +36,9 @@ Then open `https://<SITE_ADDRESS>:8443`. The browser warns about the certificate
 either install the college certificate (copy `tls.caddy.example` to `tls.caddy`, set
 `CERTS_DIR` in `rugby.env`, restart) or trust Caddy's local authority.
 
-`rugby.sh status` lists the instances, `rugby.sh logs api` (or `postgres`, `redis`,
-`worker-cpu`, `worker-gpu`, `caddy`) shows their output, `rugby.sh stop` stops them all.
+`rugby.sh status` lists the six services, `rugby.sh logs api` (or `postgres`, `redis`,
+`worker-cpu`, `worker-gpu`, `caddy`; add `-f` to follow) shows their output, `rugby.sh stop`
+stops them all. Logs live in `DATA_DIR/logs`, pid files in `DATA_DIR/run`.
 
 ## Upgrades
 
@@ -50,12 +51,22 @@ Database migrations run when the api instance starts.
 
 ## After a reboot
 
-Install the user service once; it is written with the path of your checkout:
+If the server gives you a systemd user session (`systemctl --user status` works), install the
+user service once; it is written with the path of your checkout:
 
 ```bash
 deploy/apptainer/rugby.sh install-service
 loginctl enable-linger "$USER"     # keep it running when nobody is logged in
 ```
+
+If it does not (the usual sign is "Failed to connect to bus"), use cron instead. `crontab -e`
+and add one line, which also restarts anything that has crashed:
+
+```
+*/5 * * * * $HOME/Desktop/bsd/deploy/apptainer/rugby.sh start >> $HOME/rugby-data/logs/cron.log 2>&1
+```
+
+`start` is safe to repeat: services that are already running are left alone.
 
 ## Backups
 
@@ -77,11 +88,10 @@ needs to know.
 
 ## First-start checklist (what to verify on the server)
 
-This deployment path could not be executed in the environment the app was built in, so
-check these the first time:
+Check these the first time:
 
 1. `rugby.sh build` finishes and `deploy/apptainer/images/` holds four `.sif` files.
-2. `rugby.sh start` prints `started`; `rugby.sh status` shows six `rugby-*` instances.
+2. `rugby.sh start` prints `started`; `rugby.sh status` shows six services `running`.
 3. `rugby.sh logs postgres` shows `database system is ready to accept connections`; if it
    complains about permissions on `/var/lib/postgresql/data`, make sure `DATA_DIR/postgres`
    is empty and owned by you.

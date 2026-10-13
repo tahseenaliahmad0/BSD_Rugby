@@ -8,7 +8,7 @@ cd "$(dirname "$0")/../.."
 mkdir -p "$DEST"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FILE="$DEST/rugby-$STAMP.dump"
-if command -v apptainer >/dev/null 2>&1 && apptainer instance list 2>/dev/null | grep -q rugby-postgres; then
+if [ -f deploy/apptainer/rugby.env ] && command -v apptainer >/dev/null 2>&1; then
   exec deploy/apptainer/rugby.sh backup "$DEST"
 fi
 docker compose exec -T postgres pg_dump -U "${POSTGRES_USER:-rugby}" -Fc "${POSTGRES_DB:-rugby}" > "$FILE"

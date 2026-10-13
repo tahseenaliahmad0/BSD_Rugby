@@ -3,17 +3,20 @@
 #
 #   deploy/apptainer/rugby.sh build [name...] build the four images, or just the named ones
 #                                            (postgres redis backend caddy); needs network
-#   deploy/apptainer/rugby.sh start          start postgres, redis, api, workers, caddy as instances
+#   deploy/apptainer/rugby.sh start          start postgres, redis, api, workers, caddy (background processes)
 #   deploy/apptainer/rugby.sh stop | restart | status
 #   deploy/apptainer/rugby.sh logs <service> [-f]
 #   deploy/apptainer/rugby.sh create-admin   first administrator (prompts for a password)
 #   deploy/apptainer/rugby.sh seed           demo squad and match (development only)
 #   deploy/apptainer/rugby.sh backup <dir>   pg_dump into <dir>
-#   deploy/apptainer/rugby.sh shell <service>
+#   deploy/apptainer/rugby.sh shell [backend|postgres|caddy]   a shell inside an image (backend has the app env)
 #   deploy/apptainer/rugby.sh install-service   user systemd unit so it restarts after a reboot
 #
 # Services run on the host network: Postgres, Redis and the API bind 127.0.0.1; Caddy is the only
-# public port. Settings come from deploy/apptainer/rugby.env (see rugby.env.example).
+# public port. Each service is a background `apptainer run` with a pid file in DATA_DIR/run and a
+# log in DATA_DIR/logs. Apptainer "instances" are not used because rootless instances need a
+# systemd user bus for cgroups, which locked-down servers do not provide.
+# Settings come from deploy/apptainer/rugby.env (see rugby.env.example).
 # DRY_RUN=1 prints the apptainer commands instead of running them.
 set -euo pipefail
 
@@ -48,7 +51,6 @@ GPU="${GPU:-auto}"
 WORKER_CONCURRENCY="${WORKER_CONCURRENCY:-1}"
 CERTS_DIR="${CERTS_DIR:-}"
 TLS_FILE="${TLS_FILE:-$HERE/tls.caddy}"
-PREFIX="${INSTANCE_PREFIX:-rugby}"
 
 SERVICES=(postgres redis api worker-cpu worker-gpu caddy)
 
@@ -80,9 +82,48 @@ gpu_flag() {
   esac
 }
 
-instance_running() {
+pid_file() { echo "$DATA_DIR/run/$1.pid"; }
+log_file() { echo "$DATA_DIR/logs/$1.log"; }
+
+service_pid() {
+  local f; f="$(pid_file "$1")"
+  [ -f "$f" ] && cat "$f" 2>/dev/null || true
+}
+
+service_running() {
   [ "${DRY_RUN:-0}" = "1" ] && return 1
-  "$APPTAINER" instance list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$PREFIX-$1"
+  local pid; pid="$(service_pid "$1")"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+# launch <service> <apptainer args...>: a background `apptainer run`, detached from this shell.
+launch() {
+  local service="$1"; shift
+  local logf; logf="$(log_file "$service")"
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    printf '+ (background, log %s)' "$logf"; printf ' %q' "$APPTAINER" run "$@"; printf '\n'
+    return 0
+  fi
+  setsid nohup "$APPTAINER" run "$@" >> "$logf" 2>&1 < /dev/null &
+  echo $! > "$(pid_file "$service")"
+  sleep 1
+  if ! kill -0 "$(service_pid "$service")" 2>/dev/null; then
+    die "$service exited at once; last lines of $logf:
+$(tail -n 20 "$logf")"
+  fi
+}
+
+stop_service() {
+  local service="$1" pid
+  pid="$(service_pid "$service")"
+  if [ "${DRY_RUN:-0}" = "1" ]; then echo "+ kill -TERM <pid of $service>"; return 0; fi
+  if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then rm -f "$(pid_file "$service")"; return 0; fi
+  kill -TERM "$pid" 2>/dev/null || true
+  local i=0
+  while kill -0 "$pid" 2>/dev/null && [ $i -lt 30 ]; do sleep 1; i=$((i + 1)); done
+  if kill -0 "$pid" 2>/dev/null; then log "$service did not stop in 30s; killing"; kill -KILL "$pid" 2>/dev/null || true; fi
+  rm -f "$(pid_file "$service")"
+  log "stopped $service"
 }
 
 backend_env_file() {
@@ -187,43 +228,44 @@ wait_for() {
   done
 }
 
+backend_args() {
+  echo --cleanenv --env-file "$(backend_env_file)" --bind "$DATA_DIR/media:/data" "$IMAGES_DIR/backend.sif"
+}
+
 start_postgres() {
-  instance_running postgres && { log "postgres already running"; return; }
+  service_running postgres && { log "postgres already running"; return; }
   need_image postgres
-  run "$APPTAINER" instance start --cleanenv --env-file "$(postgres_env_file)" \
+  launch postgres --cleanenv --env-file "$(postgres_env_file)" \
     --bind "$DATA_DIR/postgres:/var/lib/postgresql/data" \
     --bind "$DATA_DIR/postgres-run:/var/run/postgresql" \
-    "$IMAGES_DIR/postgres.sif" "$PREFIX-postgres" \
-    -c listen_addresses=127.0.0.1 -c port="$POSTGRES_PORT"
-  wait_for postgres 60 "$APPTAINER" exec "instance://$PREFIX-postgres" pg_isready -h 127.0.0.1 -p "$POSTGRES_PORT" -U "$POSTGRES_USER"
+    "$IMAGES_DIR/postgres.sif" postgres -c listen_addresses=127.0.0.1 -c port="$POSTGRES_PORT"
+  wait_for postgres 60 "$APPTAINER" exec "$IMAGES_DIR/postgres.sif" pg_isready -h 127.0.0.1 -p "$POSTGRES_PORT" -U "$POSTGRES_USER"
 }
 
 start_redis() {
-  instance_running redis && { log "redis already running"; return; }
+  service_running redis && { log "redis already running"; return; }
   need_image redis
-  run "$APPTAINER" instance start --cleanenv "$IMAGES_DIR/redis.sif" "$PREFIX-redis" \
-    --bind 127.0.0.1 --port "$REDIS_PORT"
-  wait_for redis 30 "$APPTAINER" exec "instance://$PREFIX-redis" redis-cli -p "$REDIS_PORT" ping
+  launch redis --cleanenv "$IMAGES_DIR/redis.sif" --save "" --appendonly no --bind 127.0.0.1 --port "$REDIS_PORT"
+  wait_for redis 30 "$APPTAINER" exec "$IMAGES_DIR/redis.sif" redis-cli -p "$REDIS_PORT" ping
 }
 
 start_backend() {
   # start_backend <service> <role> [--nv]
   local service="$1" role="$2"; shift 2
-  instance_running "$service" && { log "$service already running"; return; }
+  service_running "$service" && { log "$service already running"; return; }
   need_image backend
-  run "$APPTAINER" instance start "$@" --cleanenv --env-file "$(backend_env_file)" \
-    --bind "$DATA_DIR/media:/data" \
-    "$IMAGES_DIR/backend.sif" "$PREFIX-$service" "$role"
+  # shellcheck disable=SC2046
+  launch "$service" "$@" $(backend_args) "$role"
 }
 
 start_caddy() {
-  instance_running caddy && { log "caddy already running"; return; }
+  service_running caddy && { log "caddy already running"; return; }
   need_image caddy
   local binds=(--bind "$DATA_DIR/media:/srv/media:ro" --bind "$DATA_DIR/caddy:/data" --bind "$DATA_DIR/caddy-config:/config")
   if [ -f "$TLS_FILE" ]; then binds+=(--bind "$TLS_FILE:/etc/caddy/tls.caddy:ro"); fi
   if [ -n "$CERTS_DIR" ]; then binds+=(--bind "$CERTS_DIR:/certs:ro"); fi
-  run "$APPTAINER" instance start --cleanenv --env-file "$(caddy_env_file)" "${binds[@]}" \
-    "$IMAGES_DIR/caddy.sif" "$PREFIX-caddy"
+  launch caddy --cleanenv --env-file "$(caddy_env_file)" "${binds[@]}" "$IMAGES_DIR/caddy.sif" \
+    run --config /etc/caddy/Caddyfile --adapter caddyfile
 }
 
 cmd_start() {
@@ -233,57 +275,68 @@ cmd_start() {
   start_postgres
   start_redis
   start_backend api api
-  wait_for api 120 "$APPTAINER" exec "instance://$PREFIX-api" python -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:$API_PORT/api/health', timeout=2)"
+  wait_for api 180 "$APPTAINER" exec "$IMAGES_DIR/backend.sif" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:$API_PORT/api/health', timeout=2)"
   # The transcode worker gets the GPU too so FFmpeg can use NVENC.
   start_backend worker-cpu worker-cpu ${nv:+$nv}
   start_backend worker-gpu worker-gpu ${nv:+$nv}
   start_caddy
-  log "started. Open https://$SITE_ADDRESS:$HTTPS_PORT (GPU: ${nv:-not used})"
+  log "started. Open https://$SITE_ADDRESS:$HTTPS_PORT (GPU: ${nv:-not used}). Logs: $DATA_DIR/logs"
 }
 
 cmd_stop() {
-  need_apptainer
   local s
-  for s in caddy worker-gpu worker-cpu api redis postgres; do
-    if instance_running "$s" || [ "${DRY_RUN:-0}" = "1" ]; then
-      run "$APPTAINER" instance stop "$PREFIX-$s" || true
-    fi
-  done
+  for s in caddy worker-gpu worker-cpu api redis postgres; do stop_service "$s"; done
 }
 
 cmd_status() {
-  need_apptainer
-  "$APPTAINER" instance list | grep -E "INSTANCE|$PREFIX-" || echo "no $PREFIX instances running"
+  local s pid state
+  printf '%-12s %-8s %s\n' SERVICE STATE PID
+  for s in "${SERVICES[@]}"; do
+    pid="$(service_pid "$s")"
+    if service_running "$s"; then state=running; else state=stopped; pid=""; fi
+    printf '%-12s %-8s %s\n' "$s" "$state" "$pid"
+  done
 }
 
 cmd_logs() {
   local service="${1:-api}"; shift || true
-  local dir="$HOME/.apptainer/instances/logs/$(hostname)/$(id -un)"
-  local out="$dir/$PREFIX-$service.out" err="$dir/$PREFIX-$service.err"
-  [ -f "$out" ] || [ -f "$err" ] || die "no logs yet for $service (looked in $dir)"
-  if [ "${1:-}" = "-f" ]; then tail -n 50 -f "$out" "$err"; else tail -n 200 "$out" "$err"; fi
+  local logf; logf="$(log_file "$service")"
+  [ -f "$logf" ] || die "no log yet for $service (looked for $logf)"
+  if [ "${1:-}" = "-f" ]; then tail -n 50 -f "$logf"; else tail -n 200 "$logf"; fi
 }
 
-cmd_exec_api() {
-  instance_running api || die "the api instance is not running (rugby.sh start)"
-  run "$APPTAINER" exec "instance://$PREFIX-api" "$@"
+cmd_exec_backend() {
+  need_image backend
+  # shellcheck disable=SC2046
+  run "$APPTAINER" exec $(backend_args) "$@"
 }
 
-cmd_create_admin() { cmd_exec_api python -m app.scripts.create_admin --email "$ADMIN_EMAIL" --name "$ADMIN_NAME" "$@"; }
-cmd_seed() { cmd_exec_api python -m app.scripts.seed "$@"; }
+cmd_create_admin() {
+  service_running postgres || [ "${DRY_RUN:-0}" = "1" ] || die "postgres is not running (rugby.sh start)"
+  cmd_exec_backend python -m app.scripts.create_admin --email "$ADMIN_EMAIL" --name "$ADMIN_NAME" "$@"
+}
+cmd_seed() {
+  service_running postgres || [ "${DRY_RUN:-0}" = "1" ] || die "postgres is not running (rugby.sh start)"
+  cmd_exec_backend python -m app.scripts.seed "$@"
+}
 
 cmd_backup() {
   local dest="${1:?destination directory}"
   mkdir -p "$dest"
   local file="$dest/rugby-$(date +%Y%m%d-%H%M%S).dump"
-  run "$APPTAINER" exec "instance://$PREFIX-postgres" pg_dump -h 127.0.0.1 -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$file"
+  run "$APPTAINER" exec --cleanenv --env "PGPASSWORD=$POSTGRES_PASSWORD" "$IMAGES_DIR/postgres.sif" \
+    pg_dump -h 127.0.0.1 -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$file"
   log "wrote $file"
   ls -1t "$dest"/rugby-*.dump 2>/dev/null | tail -n +31 | xargs -r rm --
 }
 
 cmd_shell() {
-  local service="${1:-api}"
-  run "$APPTAINER" shell "instance://$PREFIX-$service"
+  case "${1:-backend}" in
+    postgres) run "$APPTAINER" shell --cleanenv --env "PGPASSWORD=$POSTGRES_PASSWORD" "$IMAGES_DIR/postgres.sif" ;;
+    caddy) run "$APPTAINER" shell "$IMAGES_DIR/caddy.sif" ;;
+    *) # shellcheck disable=SC2046
+       run "$APPTAINER" shell $(backend_args) ;;
+  esac
 }
 
 cmd_install_service() {
@@ -293,7 +346,7 @@ cmd_install_service() {
   unit="$dir/rugby.service"
   cat > "$unit" <<UNIT
 [Unit]
-Description=Rugby video analysis (Apptainer instances)
+Description=Rugby video analysis (Apptainer services)
 After=network-online.target
 
 [Service]

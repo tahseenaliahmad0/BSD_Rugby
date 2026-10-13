@@ -5,8 +5,10 @@
 set -euo pipefail
 FILE="${1:?dump file}"
 cd "$(dirname "$0")/../.."
-if command -v apptainer >/dev/null 2>&1 && apptainer instance list 2>/dev/null | grep -q rugby-postgres; then
-  exec apptainer exec instance://rugby-postgres pg_restore -h 127.0.0.1 -U "${POSTGRES_USER:-rugby}" -d "${POSTGRES_DB:-rugby}" --clean --if-exists --no-owner < "$FILE"
+if [ -f deploy/apptainer/rugby.env ] && command -v apptainer >/dev/null 2>&1; then
+  set -a; . deploy/apptainer/rugby.env; set +a
+  exec apptainer exec --cleanenv --env "PGPASSWORD=${POSTGRES_PASSWORD:-rugby}" deploy/apptainer/images/postgres.sif \
+    pg_restore -h 127.0.0.1 -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-rugby}" -d "${POSTGRES_DB:-rugby}" --clean --if-exists --no-owner < "$FILE"
 fi
 docker compose exec -T postgres pg_restore -U "${POSTGRES_USER:-rugby}" -d "${POSTGRES_DB:-rugby}" --clean --if-exists --no-owner < "$FILE"
 echo "restored $FILE; start the app again with: docker compose up -d"

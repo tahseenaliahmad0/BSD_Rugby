@@ -2,7 +2,7 @@
 # install-service`, which writes this file with the real path of your checkout, then
 #   loginctl enable-linger $USER      # keeps user services running when nobody is logged in
 [Unit]
-Description=Rugby video analysis (Apptainer instances)
+Description=Rugby video analysis (Apptainer services)
 After=network-online.target
 
 [Service]

@@ -45,12 +45,12 @@ Date: 2026-10-13. Branch `claude/keen-hawking-km90vd`. Companion to `plan-m2.md`
 
 ## Deployment change
 
-The college server allows Apptainer only. `deploy/apptainer/` now holds definition files for
-the four images, a launcher that runs the services as instances, an env template and a user
+The college server allows Apptainer only. `deploy/apptainer/` holds definition files for the
+four images, a launcher that runs the services as background processes with pid and log files
+(rootless instances need a systemd user bus the server lacks), an env template and a user
 systemd unit; `deploy/apptainer/README.md` has the install steps and a first-start checklist.
-Apptainer is not available in the build sandbox, so the launcher was verified in dry-run mode
-and the def files mirror the Dockerfiles that CI builds; the first real start happens on the
-server (ADR 0009).
+The four images were built on the server; the launcher's process handling was exercised against
+a fake `apptainer` in the build sandbox (ADR 0009).
 
 ## Known limits
 
